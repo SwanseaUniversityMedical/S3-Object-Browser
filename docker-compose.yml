@@ -1,0 +1,306 @@
+services:
+  # ============================================================================
+  # Database for Keycloak and optional audit log persistence
+  # ============================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: object-browser-postgres
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-audit-db.sql:/docker-entrypoint-initdb.d/01-audit.sql:ro
+    networks:
+      - object-browser-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    labels:
+      description: "PostgreSQL database for Keycloak and audit logs"
+
+  # ============================================================================
+  # Keycloak OIDC Identity Provider
+  # ============================================================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: object-browser-keycloak
+    command:
+      - start-dev
+      - --db=postgres
+      - --db-url=jdbc:postgresql://postgres:5432/keycloak
+      - --db-username=keycloak
+      - --db-password=keycloak_password
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_password
+      KC_DB_URL_HOST: postgres
+      KC_DB_URL_PORT: 5432
+      KC_DB_URL_DATABASE: keycloak
+      KC_HOSTNAME: localhost
+      KC_HOSTNAME_PORT: 8080
+      KC_HOSTNAME_STRICT: false
+      KC_HOSTNAME_STRICT_HTTPS: false
+      KC_HTTP_ENABLED: true
+      KC_HEALTH_ENABLED: true
+      KC_LOG_LEVEL: "info"
+      KC_TRANSACTION_XA_ENABLED: "false"
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+    ports:
+      - "8080:8080"
+    networks:
+      - object-browser-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/8080' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    labels:
+      description: "Keycloak OIDC identity provider"
+
+  # ============================================================================
+  # MinIO S3 Object Storage - Primary
+  # ============================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: object-browser-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      # Enable STS and OIDC for Keycloak integration
+      MINIO_IDENTITY_OIDC_CONFIG_URL: "http://keycloak:8080/realms/object-browser/.well-known/openid-configuration"
+      MINIO_IDENTITY_OIDC_CLIENT_ID: "object-browser-client"
+      MINIO_IDENTITY_OIDC_CLIENT_SECRET: "object-browser-client-secret"
+      MINIO_IDENTITY_OIDC_REDIRECT_URI: "http://localhost:9090/oauth_callback"
+      MINIO_IDENTITY_OIDC_DISPLAY_NAME: "Keycloak"
+      MINIO_IDENTITY_OIDC_SCOPES: "openid,profile,email"
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    networks:
+      - object-browser-network
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      description: "MinIO S3 object storage - primary"
+
+  # ============================================================================
+  # MinIO S3 Object Storage - Secondary (for multi-connection testing)
+  # ============================================================================
+  minio2:
+    image: minio/minio:latest
+    container_name: object-browser-minio2
+    command: server /data --console-address ":9011"
+    environment:
+      MINIO_ROOT_USER: admin2
+      MINIO_ROOT_PASSWORD: password2
+      # Enable STS and OIDC
+      MINIO_IDENTITY_OIDC_CONFIG_URL: "http://keycloak:8080/realms/object-browser/.well-known/openid-configuration"
+      MINIO_IDENTITY_OIDC_CLIENT_ID: "object-browser-client"
+      MINIO_IDENTITY_OIDC_CLIENT_SECRET: "object-browser-client-secret"
+      MINIO_IDENTITY_OIDC_REDIRECT_URI: "http://localhost:9090/oauth_callback"
+    volumes:
+      - minio2_data:/data
+    ports:
+      - "9010:9000"
+      - "9011:9011"
+    networks:
+      - object-browser-network
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      description: "MinIO S3 object storage - secondary for multi-connection testing"
+
+  # ============================================================================
+  # Object Browser Application (Console)
+  # Security features: Auditing, CSRF, CSP, Rate Limiting, Authorization
+  # ============================================================================
+  object-browser:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: object-browser
+    command: server
+    environment:
+      # ========================================================================
+      # S3 Configuration
+      # ========================================================================
+      # Direct S3 login (for basic testing)
+      CONSOLE_S3_SERVER: "http://minio:9000"
+      CONSOLE_S3_REGION: "us-east-1"
+      
+      # ========================================================================
+      # Security Configuration - Phase 4 Implementation
+      # ========================================================================
+      # Encryption/Hashing
+      CONSOLE_PBKDF_PASSPHRASE: "object-browser-secret-passphrase-min32-chars"
+      CONSOLE_PBKDF_SALT: "object-browser-secret-salt-min32-characters"
+      
+      # Audit Logging (MANDATORY)
+      CONSOLE_AUDIT_ENABLED: "true"
+      CONSOLE_AUDIT_BUFFER_SIZE: "10000"
+      CONSOLE_AUDIT_LOG_LEVEL: "debug"
+      # Optional: Persist audit logs to PostgreSQL
+      CONSOLE_AUDIT_PERSISTENCE_ENABLED: "true"
+      CONSOLE_AUDIT_PERSISTENCE_URL: "postgresql://keycloak:keycloak_password@postgres:5432/audit_logs"
+      CONSOLE_AUDIT_PERSISTENCE_BATCH_SIZE: "100"
+      CONSOLE_AUDIT_PERSISTENCE_INTERVAL_SECONDS: "30"
+      
+      # CSRF Protection (Mandatory for state-changing operations)
+      CONSOLE_CSRF_ENABLED: "true"
+      CONSOLE_CSRF_TOKEN_EXPIRY: "3600"
+      CONSOLE_CSRF_HEADER_NAME: "X-CSRF-Token"
+      CONSOLE_CSRF_COOKIE_SECURE: "false"  # Set to true in production with HTTPS
+      CONSOLE_CSRF_COOKIE_HTTPONLY: "true"
+      CONSOLE_CSRF_COOKIE_SAMESITE: "Strict"
+      
+      # Rate Limiting (Mandatory for expensive operations)
+      CONSOLE_RATE_LIMIT_ENABLED: "true"
+      CONSOLE_RATE_LIMIT_WINDOW_SECONDS: "60"
+      CONSOLE_RATE_LIMIT_LIST_OPS: "100"        # List buckets/objects
+      CONSOLE_RATE_LIMIT_UPLOAD_OPS: "50"       # Upload files
+      CONSOLE_RATE_LIMIT_DOWNLOAD_OPS: "100"    # Download files
+      CONSOLE_RATE_LIMIT_DELETE_OPS: "50"       # Delete objects
+      CONSOLE_RATE_LIMIT_RESTORE_OPS: "10"      # Restore archived objects
+      CONSOLE_RATE_LIMIT_TAG_OPS: "50"          # Tag objects
+      CONSOLE_RATE_LIMIT_GLOBAL: "200"          # Global limit per user
+      
+      # Security Headers (Mandatory for defense-in-depth)
+      CONSOLE_SECURITY_HEADERS_ENABLED: "true"
+      
+      # Content Security Policy
+      CONSOLE_CSP_ENABLED: "true"
+      CONSOLE_CSP_REPORT_ONLY: "false"  # Set to true for testing
+      CONSOLE_CSP_REPORT_URI: "/api/security/csp-report"
+      CONSOLE_CSP_DIRECTIVES: "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'self';"
+      
+      # HSTS (HTTP Strict Transport Security)
+      CONSOLE_HSTS_ENABLED: "true"
+      CONSOLE_HSTS_MAX_AGE: "31536000"
+      CONSOLE_HSTS_INCLUDE_SUBDOMAINS: "true"
+      CONSOLE_HSTS_PRELOAD: "false"  # Set to true after testing
+      
+      # Additional Security Headers
+      CONSOLE_X_FRAME_OPTIONS: "DENY"
+      CONSOLE_X_CONTENT_TYPE_OPTIONS: "nosniff"
+      CONSOLE_REFERRER_POLICY: "strict-origin-when-cross-origin"
+      
+      # ========================================================================
+      # Frontend UX Configuration
+      # ========================================================================
+      CONSOLE_UX_FAST_PREFIX_NAV: "true"
+      CONSOLE_UX_UPLOAD_PROGRESS: "true"
+      CONSOLE_UX_ERROR_MESSAGES: "true"
+      CONSOLE_UX_BREADCRUMBS: "true"
+      CONSOLE_UX_COPY_S3_PATH: "true"
+      CONSOLE_UX_ERROR_TRANSLATION: "true"
+      CONSOLE_UX_SECURITY_STATUS_DISPLAY: "true"  # Show security status in UI
+      CONSOLE_UX_AUDIT_LOG_VIEWER: "true"         # Show audit log viewer
+      CONSOLE_UX_RATE_LIMIT_WARNINGS: "true"      # Show rate limit warnings
+      
+      # ========================================================================
+      # Authentication Methods (Testing)
+      # ========================================================================
+      # Method 1: Direct S3 Login (Basic Auth)
+      CONSOLE_AUTH_METHOD: "both"  # Options: "s3", "keycloak", "both"
+      
+      # Method 2: Keycloak OIDC (STS First)
+      # Only uncomment after Keycloak is configured with Object Browser realm
+      CONSOLE_KEYCLOAK_ENABLED: "true"
+      CONSOLE_IDP_URL: "http://keycloak:8080/realms/object-browser"
+      CONSOLE_IDP_CLIENT_ID: "object-browser-client"
+      CONSOLE_IDP_CLIENT_SECRET: "object-browser-client-secret"
+      CONSOLE_IDP_CALLBACK: "http://localhost:9090/oauth_callback"
+      CONSOLE_IDP_HMAC_PASSPHRASE: "object-browser-oidc-hmac-secret-min-32-chars"
+      CONSOLE_IDP_HMAC_SALT: "object-browser-oidc-salt-characters-min-32"
+      CONSOLE_IDP_SCOPES: "openid profile email"
+      CONSOLE_IDP_INSECURE_SKIP_VERIFY: "true"   # Only for development
+      
+      # Method 3: Direct S3 Credentials (Default/Test User)
+      CONSOLE_ACCESS_KEY: "minioadmin"
+      CONSOLE_SECRET_KEY: "minioadmin"
+      
+      # ========================================================================
+      # Logging Configuration
+      # ========================================================================
+      CONSOLE_LOG_LEVEL: "debug"
+      CONSOLE_LOG_FORMAT: "json"  # Options: "text", "json"
+      CONSOLE_LOG_REQUEST_BODY: "true"
+      CONSOLE_LOG_RESPONSE_BODY: "false"  # Do NOT log response bodies in production
+      
+      # ========================================================================
+      # Session Configuration
+      # ========================================================================
+      CONSOLE_SESSION_TIMEOUT_SECONDS: "3600"
+      CONSOLE_SESSION_IDLE_TIMEOUT_SECONDS: "1800"
+      CONSOLE_SESSION_COOKIE_SECURE: "false"  # Set to true in production with HTTPS
+      CONSOLE_SESSION_COOKIE_HTTPONLY: "true"
+      CONSOLE_SESSION_COOKIE_SAMESITE: "Strict"
+    ports:
+      - "9090:9090"
+    networks:
+      - object-browser-network
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio2:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    volumes:
+      - object-browser_data:/root/.console
+      - ./logs:/app/logs  # Mount logs directory for access
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      description: "Object Browser application with security features"
+      security: "auditing, csrf, csp, rate-limiting, authorization"
+
+volumes:
+  postgres_data:
+    driver: local
+  minio_data:
+    driver: local
+  minio2_data:
+    driver: local
+  object-browser_data:
+    driver: local
+
+networks:
+  object-browser-network:
+    driver: bridge
