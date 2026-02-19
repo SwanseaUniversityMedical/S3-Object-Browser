@@ -82,8 +82,7 @@ func getLogoutResponse(session *models.Principal, params authApi.LogoutParams) *
 		}
 	}
 	creds := getConsoleCredentialsFromSession(session)
-	credentials := ConsoleCredentials{ConsoleCredentials: creds}
-	logout(credentials)
+	logout(creds)
 	return nil
 }
 

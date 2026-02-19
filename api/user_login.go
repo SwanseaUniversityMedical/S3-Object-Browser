@@ -34,7 +34,6 @@ import (
 	"github.com/minio/console/pkg/auth"
 	"github.com/minio/console/pkg/logger"
 	"github.com/minio/console/pkg/s3client"
-	miniocreds "github.com/minio/minio-go/v7/pkg/credentials"
 )
 
 func registerLoginHandlers(api *operations.ConsoleAPI) {
@@ -163,14 +162,14 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 
 	// Create JWT token directly without S3 validation
 	// OAuth user is already authenticated by Keycloak, S3 access will be validated on actual S3 operations
-	credsValue := miniocreds.Value{
+	credsValue := &auth.CredentialsValue{
 		AccessKeyID:     accessKey,
 		SecretAccessKey: secretKey,
 		SessionToken:    "",
 	}
 
 	sessionFeatures := &auth.SessionFeatures{}
-	token, err := auth.NewEncryptedTokenForClient(&credsValue, accessKey, sessionFeatures)
+	token, err := auth.NewEncryptedTokenForClient(credsValue, accessKey, sessionFeatures)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session token: %w", err)
 	}
@@ -192,13 +191,13 @@ func login(credentials *s3client.S3Credentials, sessionFeatures *auth.SessionFea
 	if err != nil {
 		return nil, err
 	}
-	// Create credentials for token generation using minio-go credentials type
-	credsValue := miniocreds.Value{
+	// Create credentials for token generation using S3 credentials structure
+	credsValue := &auth.CredentialsValue{
 		AccessKeyID:     credentials.AccessKey,
 		SecretAccessKey: credentials.SecretKey,
 		SessionToken:    credentials.SessionToken,
 	}
-	token, err := auth.NewEncryptedTokenForClient(&credsValue, credentials.AccessKey, sessionFeatures)
+	token, err := auth.NewEncryptedTokenForClient(credsValue, credentials.AccessKey, sessionFeatures)
 	if err != nil {
 		logger.LogIf(context.Background(), fmt.Errorf("error authenticating user: %v", err))
 		return nil, ErrInvalidLogin

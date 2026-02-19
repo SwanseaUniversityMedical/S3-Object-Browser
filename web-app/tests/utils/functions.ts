@@ -17,25 +17,46 @@
 import * as roles from "./roles";
 import * as elements from "./elements";
 import * as constants from "./constants";
+import { createReadStream } from "fs";
 import { Selector } from "testcafe";
 
-import * as Minio from "minio";
+import {
+  CreateBucketCommand,
+  DeleteBucketCommand,
+  DeleteObjectCommand,
+  ListObjectsV2Command,
+  PutBucketVersioningCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
+
+const getS3Client = () => {
+  return new S3Client({
+    region: "us-east-1",
+    endpoint: "http://localhost:9000",
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: "s3admin",
+      secretAccessKey: "s3admin",
+    },
+  });
+};
 
 export const setUpBucket = (t, modifier) => {
   return setUpNamedBucket(t, `${constants.TEST_BUCKET_NAME}-${modifier}`);
 };
 
 export const setUpNamedBucket = (t, name) => {
-  const minioClient = new Minio.Client({
-    endPoint: "localhost",
-    port: 9000,
-    useSSL: false,
-    accessKey: "minioadmin",
-    secretKey: "minioadmin",
-  });
-  return minioClient.makeBucket(name, "us-east-1").catch((err) => {
-    console.log(err);
-  });
+  const s3Client = getS3Client();
+  return s3Client
+    .send(
+      new CreateBucketCommand({
+        Bucket: name,
+      }),
+    )
+    .catch((err) => {
+      console.log(err);
+    });
 };
 
 export const uploadObjectToBucket = (t, modifier, objectName, objectPath) => {
@@ -50,15 +71,15 @@ export const uploadNamedObjectToBucket = async (
   objectPath,
 ) => {
   const bucketName = modifier;
-  const minioClient = new Minio.Client({
-    endPoint: "localhost",
-    port: 9000,
-    useSSL: false,
-    accessKey: "minioadmin",
-    secretKey: "minioadmin",
-  });
-  return minioClient
-    .fPutObject(bucketName, objectName, objectPath, {})
+  const s3Client = getS3Client();
+  return s3Client
+    .send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: objectName,
+        Body: createReadStream(objectPath),
+      }),
+    )
     .catch((err) => {
       console.log(err);
     });
@@ -69,17 +90,15 @@ export const setVersioned = (t, modifier) => {
 };
 
 export const setVersionedBucket = (t, name) => {
-  const minioClient = new Minio.Client({
-    endPoint: "localhost",
-    port: 9000,
-    useSSL: false,
-    accessKey: "minioadmin",
-    secretKey: "minioadmin",
-  });
-
-  return new Promise((resolve, reject) => {
-    minioClient
-      .setBucketVersioning(name, { Status: "Enabled" })
+  const s3Client = getS3Client();
+  return new Promise((resolve) => {
+    s3Client
+      .send(
+        new PutBucketVersioningCommand({
+          Bucket: name,
+          VersioningConfiguration: { Status: "Enabled" },
+        }),
+      )
       .then(resolve)
       .catch(resolve);
   });
@@ -94,15 +113,8 @@ export const manageButtonFor = (modifier) => {
 };
 
 export const cleanUpNamedBucket = (t, name) => {
-  const minioClient = new Minio.Client({
-    endPoint: "localhost",
-    port: 9000,
-    useSSL: false,
-    accessKey: "minioadmin",
-    secretKey: "minioadmin",
-  });
-
-  return minioClient.removeBucket(name);
+  const s3Client = getS3Client();
+  return s3Client.send(new DeleteBucketCommand({ Bucket: name }));
 };
 
 export const cleanUpBucket = (t, modifier) => {
@@ -119,31 +131,32 @@ export const testBucketBrowseButtonFor = (modifier) => {
   );
 };
 
-export const cleanUpNamedBucketAndUploads = (t, bucket) => {
-  return new Promise((resolve, reject) => {
-    const minioClient = new Minio.Client({
-      endPoint: "localhost",
-      port: 9000,
-      useSSL: false,
-      accessKey: "minioadmin",
-      secretKey: "minioadmin",
-    });
+export const cleanUpNamedBucketAndUploads = async (t, bucket) => {
+  const s3Client = getS3Client();
+  let continuationToken: string | undefined;
+  do {
+    const result = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: bucket,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const objects = result.Contents || [];
+    await Promise.all(
+      objects
+        .filter((obj) => obj.Key)
+        .map((obj) =>
+          s3Client.send(
+            new DeleteObjectCommand({ Bucket: bucket, Key: obj.Key! }),
+          ),
+        ),
+    );
+    continuationToken = result.IsTruncated
+      ? result.NextContinuationToken
+      : undefined;
+  } while (continuationToken);
 
-    var stream = minioClient.listObjects(bucket, "", true);
-
-    let proms: any[] = [];
-    stream.on("data", function (obj) {
-      if (obj.name) {
-        proms.push(minioClient.removeObject(bucket, obj.name));
-      }
-    });
-
-    stream.on("end", () => {
-      Promise.all(proms).then(() => {
-        minioClient.removeBucket(bucket).then(resolve).catch(resolve);
-      });
-    });
-  });
+  await s3Client.send(new DeleteBucketCommand({ Bucket: bucket }));
 };
 
 export const cleanUpBucketAndUploads = (t, modifier) => {

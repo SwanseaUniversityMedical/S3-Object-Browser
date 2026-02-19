@@ -19,15 +19,13 @@ package auth
 import (
 	"testing"
 
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/assert"
 )
 
-var creds = &credentials.Value{
+var creds = &CredentialsValue{
 	AccessKeyID:     "fakeAccessKeyID",
 	SecretAccessKey: "fakeSecretAccessKey",
 	SessionToken:    "fakeSessionToken",
-	SignerType:      0,
 }
 
 var (

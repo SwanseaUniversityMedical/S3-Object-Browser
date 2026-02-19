@@ -34,12 +34,18 @@ import (
 
 	"github.com/minio/console/models"
 	"github.com/minio/console/pkg/auth/token"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+// CredentialsValue represents S3/AWS credentials
+type CredentialsValue struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+}
 
 // Session token errors
 var (
@@ -111,9 +117,9 @@ func SessionTokenAuthenticate(token string) (*TokenClaims, error) {
 	return claimTokens, nil
 }
 
-// NewEncryptedTokenForClient generates a new session token with claims based on the provided STS credentials, first
+// NewEncryptedTokenForClient generates a new session token with claims based on the provided S3 credentials, first
 // encrypts the claims and the sign them
-func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey string, features *SessionFeatures) (string, error) {
+func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey string, features *SessionFeatures) (string, error) {
 	if credentials != nil {
 		tokenClaims := &TokenClaims{
 			STSAccessKeyID:     credentials.AccessKeyID,

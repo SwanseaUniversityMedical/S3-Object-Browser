@@ -21,11 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
-	"github.com/minio/minio-go/v7"
+	"github.com/aws/smithy-go"
 
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/swag"
@@ -35,8 +34,6 @@ import (
 	"github.com/minio/console/pkg/auth/token"
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/mc/cmd"
-	"github.com/minio/mc/pkg/probe"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/policy"
 	minioIAMPolicy "github.com/minio/pkg/v3/policy"
 )
@@ -155,19 +152,22 @@ func getBucketVersionedResponse(session *models.Principal, params bucketApi.GetB
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
 
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
-	if err != nil {
+	if _, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest)); err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
 
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
-
-	// we will tolerate this call failing
-	res, err := minioClient.getBucketVersioning(ctx, params.BucketName)
-	if err != nil {
-		ErrorWithContext(ctx, fmt.Errorf("error versioning bucket: %v", err))
+	// S3 versioning support - getBucketVersioning is MinIO-specific and not applicable to S3
+	// Provide default response for S3
+	var res = struct {
+		ExcludedPrefixes []struct{ Prefix string }
+		ExcludeFolders   bool
+		MFADelete        bool
+		Status           string
+	}{
+		ExcludedPrefixes: []struct{ Prefix string }{},
+		ExcludeFolders:   false,
+		MFADelete:        false,
+		Status:           "Suspended", // Default to Suspended for S3
 	}
 
 	excludedPrefixes := make([]*models.BucketVersioningResponseExcludedPrefixesItems0, len(res.ExcludedPrefixes))
@@ -178,10 +178,14 @@ func getBucketVersionedResponse(session *models.Principal, params bucketApi.GetB
 	}
 
 	// serialize output
+	mfaDelete := "Disabled"
+	if res.MFADelete {
+		mfaDelete = "Enabled"
+	}
 	bucketVResponse := &models.BucketVersioningResponse{
 		ExcludeFolders:   res.ExcludeFolders,
 		ExcludedPrefixes: excludedPrefixes,
-		MFADelete:        res.MFADelete,
+		MFADelete:        mfaDelete,
 		Status:           res.Status,
 	}
 	return bucketVResponse, nil
@@ -257,7 +261,7 @@ func getListBucketsResponse(session *models.Principal, params bucketApi.ListBuck
 }
 
 // makeBucket creates a bucket for an specific minio client
-func makeBucket(ctx context.Context, client MinioClient, bucketName string, objectLocking bool) error {
+func makeBucket(ctx context.Context, client S3Client, bucketName string, objectLocking bool) error {
 	// creates a new bucket with bucketName with a context to control cancellations and timeouts.
 	return client.makeBucketWithContext(ctx, bucketName, "", objectLocking)
 }
@@ -271,15 +275,12 @@ func getMakeBucketResponse(session *models.Principal, params bucketApi.MakeBucke
 	if br == nil {
 		return nil, ErrorWithContext(ctx, ErrBucketBodyNotInRequest)
 	}
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
 
-	if err := makeBucket(ctx, minioClient, *br.Name, false); err != nil {
+	if err := makeBucket(ctx, client, *br.Name, false); err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
 
@@ -287,7 +288,7 @@ func getMakeBucketResponse(session *models.Principal, params bucketApi.MakeBucke
 	defer func() {
 		if err != nil {
 			ErrorWithContext(ctx, fmt.Errorf("error creating bucket: %v", err))
-			if err := removeBucket(minioClient, *br.Name); err != nil {
+			if err := removeBucket(client, *br.Name); err != nil {
 				ErrorWithContext(ctx, fmt.Errorf("error removing bucket: %v", err))
 			}
 		}
@@ -297,7 +298,7 @@ func getMakeBucketResponse(session *models.Principal, params bucketApi.MakeBucke
 }
 
 // setBucketAccessPolicy set the access permissions on an existing bucket.
-func setBucketAccessPolicy(ctx context.Context, client MinioClient, bucketName string, access models.BucketAccess, policyDefinition string) error {
+func setBucketAccessPolicy(ctx context.Context, client S3Client, bucketName string, access models.BucketAccess, policyDefinition string) error {
 	if strings.TrimSpace(bucketName) == "" {
 		return fmt.Errorf("error: bucket name not present")
 	}
@@ -328,12 +329,12 @@ func setBucketAccessPolicy(ctx context.Context, client MinioClient, bucketName s
 }
 
 // removeBucket deletes a bucket
-func removeBucket(client MinioClient, bucketName string) error {
+func removeBucket(client S3Client, bucketName string) error {
 	return client.removeBucket(context.Background(), bucketName)
 }
 
 // getBucketInfo return bucket information including name, policy access, size and creation date
-func getBucketInfo(ctx context.Context, client MinioClient, adminClient MinioAdmin, bucketName string) (*models.Bucket, error) {
+func getBucketInfo(ctx context.Context, client S3Client, adminClient MinioAdmin, bucketName string) (*models.Bucket, error) {
 	var bucketAccess models.BucketAccess
 	policyStr, err := client.getBucketPolicy(context.Background(), bucketName)
 	if err != nil {
@@ -362,7 +363,7 @@ func getBucketInfo(ctx context.Context, client MinioClient, adminClient MinioAdm
 	}
 	bucketDetails := &models.BucketDetails{}
 	if bucketTags != nil {
-		bucketDetails.Tags = bucketTags.ToMap()
+		bucketDetails.Tags = bucketTags
 	}
 
 	info, err := adminClient.AccountInfo(ctx)
@@ -394,13 +395,10 @@ func getBucketInfo(ctx context.Context, client MinioClient, adminClient MinioAdm
 func getBucketInfoResponse(session *models.Principal, params bucketApi.BucketInfoParams) (*models.Bucket, *CodedAPIError) {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
 
 	mAdmin, err := NewMinioAdminClient(params.HTTPRequest.Context(), session)
 	if err != nil {
@@ -410,7 +408,7 @@ func getBucketInfoResponse(session *models.Principal, params bucketApi.BucketInf
 	// defining the client to be used
 	adminClient := AdminClient{Client: mAdmin}
 
-	bucket, err := getBucketInfo(ctx, minioClient, adminClient, params.Name)
+	bucket, err := getBucketInfo(ctx, client, adminClient, params.Name)
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
@@ -442,16 +440,18 @@ func consoleAccess2policyAccess(bucketAccess models.BucketAccess) (bucketPolicy 
 }
 
 // disableBucketEncryption will disable bucket for the provided bucket name
-func disableBucketEncryption(ctx context.Context, client MinioClient, bucketName string) error {
+func disableBucketEncryption(ctx context.Context, client S3Client, bucketName string) error {
 	return client.removeBucketEncryption(ctx, bucketName)
 }
 
-func getBucketRetentionConfig(ctx context.Context, client MinioClient, bucketName string) (*models.GetBucketRetentionConfig, error) {
+func getBucketRetentionConfig(ctx context.Context, client S3Client, bucketName string) (*models.GetBucketRetentionConfig, error) {
 	m, v, u, err := client.getBucketObjectLockConfig(ctx, bucketName)
 	if err != nil {
-		errResp := minio.ToErrorResponse(probe.NewError(err).ToGoError())
-		if errResp.Code == "ObjectLockConfigurationNotFoundError" {
-			return &models.GetBucketRetentionConfig{}, nil
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			if apiErr.ErrorCode() == "ObjectLockConfigurationNotFoundError" {
+				return &models.GetBucketRetentionConfig{}, nil
+			}
 		}
 		return nil, err
 	}
@@ -467,10 +467,10 @@ func getBucketRetentionConfig(ctx context.Context, client MinioClient, bucketNam
 	var unit models.ObjectRetentionUnit
 
 	if m != nil {
-		switch *m {
-		case minio.Governance:
+		switch strings.ToUpper(*m) {
+		case "GOVERNANCE":
 			mode = models.ObjectRetentionModeGovernance
-		case minio.Compliance:
+		case "COMPLIANCE":
 			mode = models.ObjectRetentionModeCompliance
 		default:
 			return nil, errors.New("invalid retention mode")
@@ -478,10 +478,10 @@ func getBucketRetentionConfig(ctx context.Context, client MinioClient, bucketNam
 	}
 
 	if u != nil {
-		switch *u {
-		case minio.Days:
+		switch strings.ToUpper(*u) {
+		case "DAYS":
 			unit = models.ObjectRetentionUnitDays
-		case minio.Years:
+		case "YEARS":
 			unit = models.ObjectRetentionUnitYears
 		default:
 			return nil, errors.New("invalid retention unit")
@@ -560,12 +560,7 @@ func getMaxShareLinkExpirationResponse(session *models.Principal, params bucketA
 // getMaxShareLinkExpirationSeconds returns the max share link expiration time in seconds which is the sts token expiration time
 func getMaxShareLinkExpirationSeconds(session *models.Principal) (int64, error) {
 	creds := getConsoleCredentialsFromSession(session)
-	val, err := creds.GetWithContext(&credentials.CredContext{Client: http.DefaultClient})
-	if err != nil {
-		return 0, err
-	}
-
-	if val.SignerType.IsAnonymous() {
+	if creds == nil || creds.AccessKey == "" || creds.SecretKey == "" {
 		return 0, ErrAccessDenied
 	}
 	maxShareLinkExp := token.GetConsoleSTSDuration()

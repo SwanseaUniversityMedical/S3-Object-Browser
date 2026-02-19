@@ -125,7 +125,7 @@ const Login = () => {
   }
 
   let docsURL =
-    "https://docs.min.io/community/minio-object-store/index.html?ref=con";
+    "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html";
 
   useEffect(() => {
     dispatch(setHelpName("login"));
@@ -154,16 +154,12 @@ const Login = () => {
               Documentation
             </a>
             <span className={"separator"}>|</span>
-            <a
-              href="https://github.com/minio/minio"
-              target="_blank"
-              rel="noopener"
-            >
+            <a href="https://github.com" target="_blank" rel="noopener">
               GitHub
             </a>
             <span className={"separator"}>|</span>
             <a
-              href="https://subnet.min.io/?ref=con"
+              href="https://aws.amazon.com/support/"
               target="_blank"
               rel="noopener"
             >
@@ -171,7 +167,7 @@ const Login = () => {
             </a>
             <span className={"separator"}>|</span>
             <a
-              href="https://min.io/download/?ref=con"
+              href="https://aws.amazon.com/s3/"
               target="_blank"
               rel="noopener"
             >
@@ -184,13 +180,15 @@ const Login = () => {
         }
         promoInfo={
           <span style={{ fontSize: 14, lineHeight: 1 }}>
-            MinIO is a cloud-native object store built to run on any
-            infrastructure - public, private or edge clouds. Primary use cases
-            include data lakes, databases, AI/ML, SaaS applications and fast
-            backup & recovery. MinIO is dual licensed under GNU AGPL v3 and
-            commercial license. To learn more, visit{" "}
-            <a href={"https://min.io/?ref=con"} target="_blank" rel="noopener">
-              www.min.io
+            This object browser connects to S3-compatible storage. Common use
+            cases include data lakes, analytics, backups, and application data
+            storage. Learn more at{" "}
+            <a
+              href={"https://aws.amazon.com/s3/"}
+              target="_blank"
+              rel="noopener"
+            >
+              aws.amazon.com/s3
             </a>
             .
           </span>

@@ -30,7 +30,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/minio-go/v7"
+	"github.com/aws/smithy-go"
 
 	"github.com/minio/console/pkg/utils"
 
@@ -41,8 +41,6 @@ import (
 	objectApi "github.com/minio/console/api/operations/object"
 	"github.com/minio/console/models"
 	mc "github.com/minio/mc/cmd"
-	"github.com/minio/mc/pkg/probe"
-	"github.com/minio/minio-go/v7/pkg/tags"
 	"github.com/minio/pkg/v3/mimedb"
 )
 
@@ -179,17 +177,14 @@ func getListObjectsResponse(session *models.Principal, params objectApi.ListObje
 	if params.BucketName == "" {
 		return nil, ErrorWithContext(ctx, ErrBucketNameNotInRequest)
 	}
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
 
 	objs, err := listBucketObjects(ListObjectsOpts{
 		ctx:          ctx,
-		client:       minioClient,
+		client:       client,
 		bucketName:   params.BucketName,
 		prefix:       prefix,
 		recursive:    recursive,
@@ -210,7 +205,7 @@ func getListObjectsResponse(session *models.Principal, params objectApi.ListObje
 
 type ListObjectsOpts struct {
 	ctx          context.Context
-	client       MinioClient
+	client       S3Client
 	bucketName   string
 	prefix       string
 	recursive    bool
@@ -222,7 +217,7 @@ type ListObjectsOpts struct {
 // listBucketObjects gets an array of objects in a bucket
 func listBucketObjects(listOpts ListObjectsOpts) ([]*models.BucketObject, error) {
 	var objects []*models.BucketObject
-	opts := minio.ListObjectsOptions{
+	opts := ListObjectsOptions{
 		Prefix:       listOpts.prefix,
 		Recursive:    listOpts.recursive,
 		WithVersions: listOpts.withVersions,
@@ -256,10 +251,15 @@ func listBucketObjects(listOpts ListObjectsOpts) ([]*models.BucketObject, error)
 		// only if single object with or without versions; get legalhold, retention and tags
 		if !lsObj.IsDeleteMarker && listOpts.prefix != "" && !strings.HasSuffix(listOpts.prefix, "/") {
 			// Add Legal Hold Status if available
-			legalHoldStatus, err := listOpts.client.getObjectLegalHold(listOpts.ctx, listOpts.bucketName, lsObj.Key, minio.GetObjectLegalHoldOptions{VersionID: lsObj.VersionID})
+			legalHoldStatus, err := listOpts.client.getObjectLegalHold(listOpts.ctx, listOpts.bucketName, lsObj.Key, GetObjectLegalHoldOptions{VersionID: lsObj.VersionID})
 			if err != nil {
-				errResp := minio.ToErrorResponse(probe.NewError(err).ToGoError())
-				if errResp.Code != "InvalidRequest" && errResp.Code != "NoSuchObjectLockConfiguration" {
+				var apiErr smithy.APIError
+				if errors.As(err, &apiErr) {
+					code := apiErr.ErrorCode()
+					if code != "InvalidRequest" && code != "NoSuchObjectLockConfiguration" {
+						ErrorWithContext(listOpts.ctx, fmt.Errorf("error getting legal hold status for %s : %v", lsObj.VersionID, err))
+					}
+				} else {
 					ErrorWithContext(listOpts.ctx, fmt.Errorf("error getting legal hold status for %s : %v", lsObj.VersionID, err))
 				}
 			} else if legalHoldStatus != nil {
@@ -268,8 +268,13 @@ func listBucketObjects(listOpts ListObjectsOpts) ([]*models.BucketObject, error)
 			// Add Retention Status if available
 			retention, retUntilDate, err := listOpts.client.getObjectRetention(listOpts.ctx, listOpts.bucketName, lsObj.Key, lsObj.VersionID)
 			if err != nil {
-				errResp := minio.ToErrorResponse(probe.NewError(err).ToGoError())
-				if errResp.Code != "InvalidRequest" && errResp.Code != "NoSuchObjectLockConfiguration" {
+				var apiErr smithy.APIError
+				if errors.As(err, &apiErr) {
+					code := apiErr.ErrorCode()
+					if code != "InvalidRequest" && code != "NoSuchObjectLockConfiguration" {
+						ErrorWithContext(listOpts.ctx, fmt.Errorf("error getting retention status for %s : %v", lsObj.VersionID, err))
+					}
+				} else {
 					ErrorWithContext(listOpts.ctx, fmt.Errorf("error getting retention status for %s : %v", lsObj.VersionID, err))
 				}
 			} else if retention != nil && retUntilDate != nil {
@@ -277,11 +282,11 @@ func listBucketObjects(listOpts ListObjectsOpts) ([]*models.BucketObject, error)
 				obj.RetentionMode = string(*retention)
 				obj.RetentionUntilDate = date.Format(time.RFC3339)
 			}
-			objTags, err := listOpts.client.getObjectTagging(listOpts.ctx, listOpts.bucketName, lsObj.Key, minio.GetObjectTaggingOptions{VersionID: lsObj.VersionID})
+			objTags, err := listOpts.client.getObjectTagging(listOpts.ctx, listOpts.bucketName, lsObj.Key, GetObjectTaggingOptions{VersionID: lsObj.VersionID})
 			if err != nil {
 				ErrorWithContext(listOpts.ctx, fmt.Errorf("error getting object tags for %s : %v", lsObj.VersionID, err))
 			} else {
-				obj.Tags = objTags.ToMap()
+				obj.Tags = objTags
 			}
 		}
 		objects = append(objects, obj)
@@ -379,18 +384,17 @@ func parseRange(s string, size int64) ([]httpRange, error) {
 
 func getDownloadObjectResponse(session *models.Principal, params objectApi.DownloadObjectParams) (middleware.Responder, *CodedAPIError) {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
 
-	opts := minio.GetObjectOptions{}
-
+	versionID := ""
 	if params.VersionID != nil && *params.VersionID != "" {
-		opts.VersionID = *params.VersionID
+		versionID = *params.VersionID
 	}
 
-	resp, err := mClient.GetObject(ctx, params.BucketName, params.Prefix, opts)
+	resp, err := client.getObject(ctx, params.BucketName, params.Prefix, versionID)
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
@@ -417,10 +421,9 @@ func getDownloadObjectResponse(session *models.Principal, params objectApi.Downl
 		escapedName := url.PathEscape(filename)
 
 		// indicate object size & content type
-		stat, err := resp.Stat()
+		stat, err := client.statObject(ctx, params.BucketName, params.Prefix, GetObjectOptions{VersionID: versionID})
 		if err != nil {
-			minErr := minio.ToErrorResponse(err)
-			fmtError := ErrorWithContext(ctx, fmt.Errorf("failed to get Stat() response from server for %s (version %s): %v", params.Prefix, opts.VersionID, minErr.Error()))
+			fmtError := ErrorWithContext(ctx, fmt.Errorf("failed to get object metadata for %s (version %s): %v", params.Prefix, versionID, err))
 			http.Error(rw, fmtError.APIError.DetailedMessage, http.StatusInternalServerError)
 			return
 		}
@@ -456,7 +459,9 @@ func getDownloadObjectResponse(session *models.Principal, params objectApi.Downl
 			start := ranges[0].Start
 			length = ranges[0].Length
 
-			_, err = resp.Seek(start, io.SeekStart)
+			if start > 0 {
+				_, err = io.CopyN(io.Discard, resp, start)
+			}
 			if err != nil {
 				fmtError := ErrorWithContext(ctx, fmt.Errorf("unable to seek at offset %d: %v", start, err))
 				http.Error(rw, fmtError.APIError.DetailedMessage, http.StatusInternalServerError)
@@ -482,17 +487,16 @@ func getDownloadObjectResponse(session *models.Principal, params objectApi.Downl
 
 func getDownloadFolderResponse(session *models.Principal, params objectApi.DownloadObjectParams) (middleware.Responder, *CodedAPIError) {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 
 	folders := strings.Split(params.Prefix, "/")
 
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
-	minioClient := minioClient{client: mClient}
 	objects, err := listBucketObjects(ListObjectsOpts{
 		ctx:          ctx,
-		client:       minioClient,
+		client:       client,
 		bucketName:   params.BucketName,
 		prefix:       params.Prefix,
 		recursive:    true,
@@ -516,7 +520,7 @@ func getDownloadFolderResponse(session *models.Principal, params objectApi.Downl
 
 		for i, obj := range objects {
 			name := folder + objects[i].Name[len(params.Prefix)-1:]
-			object, err := mClient.GetObject(ctx, params.BucketName, obj.Name, minio.GetObjectOptions{})
+			object, err := client.getObject(ctx, params.BucketName, obj.Name, "")
 			if err != nil {
 				// Ignore errors, move to next
 				continue
@@ -575,11 +579,10 @@ func getDownloadFolderResponse(session *models.Principal, params objectApi.Downl
 
 func getMultipleFilesDownloadResponse(session *models.Principal, params objectApi.DownloadMultipleObjectsParams) (middleware.Responder, *CodedAPIError) {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
-	minioClient := minioClient{client: mClient}
 
 	resp, pw := io.Pipe()
 	// Create file async
@@ -613,7 +616,7 @@ func getMultipleFilesDownloadResponse(session *models.Principal, params objectAp
 
 				objects, err := listBucketObjects(ListObjectsOpts{
 					ctx:          ctx,
-					client:       minioClient,
+					client:       client,
 					bucketName:   params.BucketName,
 					prefix:       prefix,
 					recursive:    true,
@@ -627,7 +630,7 @@ func getMultipleFilesDownloadResponse(session *models.Principal, params objectAp
 				for i, obj := range objects {
 					name := folder + objects[i].Name[len(prefix)-1:]
 
-					object, err := mClient.GetObject(ctx, params.BucketName, obj.Name, minio.GetObjectOptions{})
+					object, err := client.getObject(ctx, params.BucketName, obj.Name, "")
 					if err != nil {
 						// Ignore errors, move to next
 						continue
@@ -651,16 +654,17 @@ func getMultipleFilesDownloadResponse(session *models.Principal, params objectAp
 				}
 
 			} else {
-				object, err := mClient.GetObject(ctx, params.BucketName, dObj, minio.GetObjectOptions{})
+				object, err := client.getObject(ctx, params.BucketName, dObj, "")
 				if err != nil {
 					// Ignore errors, move to next
 					continue
 				}
 
 				// add selected individual object
-				objectData, err := object.Stat()
+				objectData, err := client.statObject(ctx, params.BucketName, dObj, GetObjectOptions{})
 				if err != nil {
 					// Ignore errors, move to next
+					object.Close()
 					continue
 				}
 
@@ -916,21 +920,18 @@ func deleteNonCurrentVersions(ctx context.Context, client MCClient, isBypass boo
 
 func getUploadObjectResponse(session *models.Principal, params objectApi.PostBucketsBucketNameObjectsUploadParams) *CodedAPIError {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
-	if err := uploadFiles(ctx, minioClient, params); err != nil {
+	if err := uploadFiles(ctx, client, params); err != nil {
 		return ErrorWithContext(ctx, err, ErrDefault)
 	}
 	return nil
 }
 
 // uploadFiles gets files from http.Request form and uploads them to MinIO
-func uploadFiles(ctx context.Context, client MinioClient, params objectApi.PostBucketsBucketNameObjectsUploadParams) error {
+func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBucketsBucketNameObjectsUploadParams) error {
 	var prefix string
 	if params.Prefix != nil {
 		prefix = *params.Prefix
@@ -962,7 +963,7 @@ func uploadFiles(ctx context.Context, client MinioClient, params objectApi.PostB
 			contentType = mimedb.TypeByExtension(filepath.Ext(p.FileName()))
 		}
 		objectName := prefix // prefix will have complete object path e.g: /test-prefix/test-object.txt
-		_, err = client.putObject(ctx, params.BucketName, objectName, p, size, minio.PutObjectOptions{
+		_, err = client.putObject(ctx, params.BucketName, objectName, p, size, PutObjectOptions{
 			ContentType:      contentType,
 			DisableMultipart: true, // Do not upload as multipart stream for console uploader.
 		})
@@ -1032,10 +1033,9 @@ func getRequestURLWithScheme(r *http.Request) string {
 	return fmt.Sprintf("%s://%s", scheme, r.Host)
 }
 
-func deleteObjectRetention(ctx context.Context, client MinioClient, bucketName, prefix, versionID string) error {
-	opts := minio.PutObjectRetentionOptions{
-		GovernanceBypass: true,
-		VersionID:        versionID,
+func deleteObjectRetention(ctx context.Context, client S3Client, bucketName, prefix, versionID string) error {
+	opts := PutObjectRetentionOptions{
+		VersionID: versionID,
 	}
 
 	return client.putObjectRetention(ctx, bucketName, prefix, opts)
@@ -1043,51 +1043,41 @@ func deleteObjectRetention(ctx context.Context, client MinioClient, bucketName, 
 
 func getPutObjectTagsResponse(session *models.Principal, params objectApi.PutObjectTagsParams) *CodedAPIError {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
-	err = putObjectTags(ctx, minioClient, params.BucketName, params.Prefix, params.VersionID, params.Body.Tags)
+	err = putObjectTags(ctx, client, params.BucketName, params.Prefix, params.VersionID, params.Body.Tags)
 	if err != nil {
 		return ErrorWithContext(ctx, err)
 	}
 	return nil
 }
 
-func putObjectTags(ctx context.Context, client MinioClient, bucketName, prefix, versionID string, tagMap map[string]string) error {
-	opt := minio.PutObjectTaggingOptions{
+func putObjectTags(ctx context.Context, client S3Client, bucketName, prefix, versionID string, tagMap map[string]string) error {
+	opt := PutObjectTaggingOptions{
 		VersionID: versionID,
 	}
-	otags, err := tags.MapToObjectTags(tagMap)
-	if err != nil {
-		return err
-	}
-	return client.putObjectTagging(ctx, bucketName, prefix, otags, opt)
+	return client.putObjectTagging(ctx, bucketName, prefix, tagMap, opt)
 }
 
 // Restore Object Version
 func getPutObjectRestoreResponse(session *models.Principal, params objectApi.PutObjectRestoreParams) *CodedAPIError {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
-	err = restoreObject(ctx, minioClient, params.BucketName, params.Prefix, params.VersionID)
+	err = restoreObject(ctx, client, params.BucketName, params.Prefix, params.VersionID)
 	if err != nil {
 		return ErrorWithContext(ctx, err)
 	}
 	return nil
 }
 
-func restoreObject(ctx context.Context, client MinioClient, bucketName, prefix, versionID string) error {
+func restoreObject(ctx context.Context, client S3Client, bucketName, prefix, versionID string) error {
 	// Select required version
-	srcOpts := minio.CopySrcOptions{
+	srcOpts := CopySrcOptions{
 		Bucket:    bucketName,
 		Object:    prefix,
 		VersionID: versionID,
@@ -1097,7 +1087,7 @@ func restoreObject(ctx context.Context, client MinioClient, bucketName, prefix, 
 	replaceMetadata := make(map[string]string)
 	replaceMetadata["copy-source"] = versionID
 
-	dstOpts := minio.CopyDestOptions{
+	dstOpts := CopyDestOptions{
 		Bucket:       bucketName,
 		Object:       prefix,
 		UserMetadata: replaceMetadata,
@@ -1115,19 +1105,16 @@ func restoreObject(ctx context.Context, client MinioClient, bucketName, prefix, 
 // Metadata Response from minio-go API
 func getObjectMetadataResponse(session *models.Principal, params objectApi.GetObjectMetadataParams) (*models.Metadata, *CodedAPIError) {
 	ctx := params.HTTPRequest.Context()
-	mClient, err := newMinioClient(session, getClientIP(params.HTTPRequest))
+	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
 	var versionID string
 	if params.VersionID != nil {
 		versionID = *params.VersionID
 	}
 
-	objectInfo, err := getObjectInfo(ctx, minioClient, params.BucketName, params.Prefix, versionID)
+	objectInfo, err := getObjectInfo(ctx, client, params.BucketName, params.Prefix, versionID)
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
@@ -1137,10 +1124,10 @@ func getObjectMetadataResponse(session *models.Principal, params objectApi.GetOb
 	return metadata, nil
 }
 
-func getObjectInfo(ctx context.Context, client MinioClient, bucketName, prefix, versionID string) (minio.ObjectInfo, error) {
-	objectData, err := client.statObject(ctx, bucketName, prefix, minio.GetObjectOptions{VersionID: versionID})
+func getObjectInfo(ctx context.Context, client S3Client, bucketName, prefix, versionID string) (ObjectInfo, error) {
+	objectData, err := client.statObject(ctx, bucketName, prefix, GetObjectOptions{VersionID: versionID})
 	if err != nil {
-		return minio.ObjectInfo{}, err
+		return ObjectInfo{}, err
 	}
 
 	return objectData, nil

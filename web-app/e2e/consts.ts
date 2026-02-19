@@ -14,10 +14,10 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-export const minioadminFile = "playwright/.auth/admin.json";
+export const adminAuthFile = "playwright/.auth/admin.json";
 
 export const SERVER_ENDPOINT = "http://localhost:9090";
 export const BUCKET_LIST_PAGE = `${SERVER_ENDPOINT}/buckets`;
 
-export const adminAccessKey = "minioadmin";
-export const adminSecretKey = "minioadmin";
+export const adminAccessKey = "s3admin";
+export const adminSecretKey = "s3admin";

@@ -74,11 +74,12 @@ services:
       description: "Keycloak OIDC identity provider"
 
   # ============================================================================
-  # MinIO S3 Object Storage - Primary
+  # S3 Object Storage - Primary (S3-compatible service)
+  # Using MinIO as it's S3-compatible when accessed via AWS SDK
   # ============================================================================
-  minio:
+  s3-primary:
     image: minio/minio:latest
-    container_name: object-browser-minio
+    container_name: object-browser-s3-primary
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: minioadmin
@@ -91,7 +92,7 @@ services:
       MINIO_IDENTITY_OIDC_DISPLAY_NAME: "Keycloak"
       MINIO_IDENTITY_OIDC_SCOPES: "openid,profile,email"
     volumes:
-      - minio_data:/data
+      - s3_primary_data:/data
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -106,14 +107,14 @@ services:
       timeout: 5s
       retries: 5
     labels:
-      description: "MinIO S3 object storage - primary"
+      description: "S3-compatible object storage - primary"
 
   # ============================================================================
-  # MinIO S3 Object Storage - Secondary (for multi-connection testing)
+  # S3 Object Storage - Secondary (for multi-connection testing)
   # ============================================================================
-  minio2:
+  s3-secondary:
     image: minio/minio:latest
-    container_name: object-browser-minio2
+    container_name: object-browser-s3-secondary
     command: server /data --console-address ":9011"
     environment:
       MINIO_ROOT_USER: admin2
@@ -124,7 +125,7 @@ services:
       MINIO_IDENTITY_OIDC_CLIENT_SECRET: "object-browser-client-secret"
       MINIO_IDENTITY_OIDC_REDIRECT_URI: "http://localhost:9090/oauth_callback"
     volumes:
-      - minio2_data:/data
+      - s3_secondary_data:/data
     ports:
       - "9010:9000"
       - "9011:9011"
@@ -139,7 +140,7 @@ services:
       timeout: 5s
       retries: 5
     labels:
-      description: "MinIO S3 object storage - secondary for multi-connection testing"
+      description: "S3-compatible object storage - secondary for multi-connection testing"
 
   # ============================================================================
   # Object Browser Application (Console)
@@ -156,8 +157,8 @@ services:
       # S3 Configuration
       # ========================================================================
       # Direct S3 login (for basic testing)
-      CONSOLE_MINIO_SERVER: "http://minio:9000"
-      CONSOLE_MINIO_REGION: "us-east-1"
+      CONSOLE_S3_SERVER: "http://s3-primary:9000"
+      CONSOLE_S3_REGION: "us-east-1"
       
       # ========================================================================
       # Security Configuration - Phase 4 Implementation
@@ -279,9 +280,9 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
-      minio:
+      s3-primary:
         condition: service_healthy
-      minio2:
+      s3-secondary:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -301,9 +302,9 @@ services:
 volumes:
   postgres_data:
     driver: local
-  minio_data:
+  s3_primary_data:
     driver: local
-  minio2_data:
+  s3_secondary_data:
     driver: local
   object-browser_data:
     driver: local

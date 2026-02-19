@@ -21,7 +21,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/minio/minio-go/v7"
+	"github.com/aws/smithy-go"
 
 	"github.com/minio/console/models"
 	"github.com/minio/madmin-go/v3"
@@ -253,9 +253,12 @@ func ErrorWithContext(ctx context.Context, err ...interface{}) *CodedAPIError {
 				errorMessage = err1.Error()
 			}
 			// bucket already exists
-			if minio.ToErrorResponse(err1).Code == "BucketAlreadyOwnedByYou" {
-				errorCode = 400
-				errorMessage = "Bucket already exists"
+			var ae smithy.APIError
+			if errors.As(err1, &ae) {
+				if ae.ErrorCode() == "BucketAlreadyOwnedByYou" || ae.ErrorCode() == "BucketAlreadyExists" {
+					errorCode = 400
+					errorMessage = "Bucket already exists"
+				}
 			}
 
 			LogError("ErrorWithContext:%v", err...)
