@@ -20,8 +20,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/minio/mc/cmd"
-	"github.com/minio/minio-go/v7"
+	"github.com/minio/console/pkg/s3client"
 )
 
 type objectsListOpts struct {
@@ -75,16 +74,12 @@ func getObjectsOptionsFromReq(request ObjectsRequest) (*objectsListOpts, error) 
 	return &pOptions, nil
 }
 
-func startObjectsListing(ctx context.Context, client MinioClient, objOpts *objectsListOpts) <-chan minio.ObjectInfo {
-	opts := minio.ListObjectsOptions{
-		Prefix: objOpts.Prefix,
-	}
-
-	return client.listObjects(ctx, objOpts.BucketName, opts)
+// startObjectsListing uses the S3 client to list objects in a bucket
+func startObjectsListing(ctx context.Context, client *s3client.S3Client, objOpts *objectsListOpts) <-chan s3client.S3ObjectInfo {
+	return client.ListObjects(ctx, objOpts.BucketName, objOpts.Prefix, false)
 }
 
-func startRewindListing(ctx context.Context, client MCClient, objOpts *objectsListOpts) <-chan *cmd.ClientContent {
-	lsRewind := client.list(ctx, cmd.ListOptions{TimeRef: objOpts.Date, WithDeleteMarkers: true})
-
-	return lsRewind
+// startRewindListing lists objects with versioning/rewind support
+func startRewindListing(ctx context.Context, client *s3client.S3Client, objOpts *objectsListOpts) <-chan s3client.S3ObjectInfo {
+	return client.ListObjectVersions(ctx, objOpts.BucketName, objOpts.Prefix)
 }

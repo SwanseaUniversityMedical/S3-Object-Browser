@@ -54,6 +54,9 @@ const consoleSlice = createSlice({
       })
       .addCase(fetchSession.fulfilled, (state, action) => {
         state.sessionLoadingState = SessionCallStates.Done;
+      })
+      .addCase(fetchSession.rejected, (state, action) => {
+        state.sessionLoadingState = SessionCallStates.Done;
       });
   },
 });

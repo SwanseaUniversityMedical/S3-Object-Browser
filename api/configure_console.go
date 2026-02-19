@@ -28,6 +28,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -40,8 +41,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/minio/console/pkg/logger"
+	"github.com/minio/console/pkg/s3client"
 	"github.com/minio/console/pkg/utils"
-	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"github.com/klauspost/compress/gzhttp"
 
@@ -87,9 +88,7 @@ func configureAPI(api *operations.ConsoleAPI) http.Handler {
 	api.KeyAuth = func(token string, _ []string) (*models.Principal, error) {
 		// we are validating the session token by decrypting the claims inside, if the operation succeed that means the jwt
 		// was generated and signed by us in the first place
-		if token == "Anonymous" {
-			return &models.Principal{}, nil
-		}
+		// No anonymous access - authentication is required
 		claims, err := auth.ParseClaimsFromToken(token)
 		if err != nil {
 			api.Logger("Unable to validate the session token %s: %v", token, err)
@@ -106,7 +105,8 @@ func configureAPI(api *operations.ConsoleAPI) http.Handler {
 		}, nil
 	}
 	api.AnonymousAuth = func(_ string) (*models.Principal, error) {
-		return &models.Principal{}, nil
+		// Anonymous access disabled - authentication required
+		return nil, errors.New(401, "authentication required")
 	}
 
 	// Register login handlers
@@ -366,6 +366,12 @@ func FileServerMiddleware(next http.Handler) http.Handler {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ws"):
 			serveWS(w, r)
+		case r.URL.Path == "/api/v1/oauth/config":
+			// OAuth configuration endpoint
+			OAuthConfigHandler(w, r)
+		case r.URL.Path == "/api/v1/oauth/callback":
+			// OAuth callback endpoint
+			OAuthCallbackHandler(w, r)
 		case strings.HasPrefix(r.URL.Path, "/api"):
 			next.ServeHTTP(w, r)
 		default:
@@ -420,10 +426,19 @@ func handleSPA(w http.ResponseWriter, r *http.Request) {
 
 	// if these three parameters are present we are being asked to issue a session with these values
 	if sts != "" && stsAccessKey != "" && stsSecretKey != "" {
-		creds := credentials.NewStaticV4(stsAccessKey, stsSecretKey, sts)
-		consoleCreds := &ConsoleCredentials{
-			ConsoleCredentials: creds,
-			AccountAccessKey:   stsAccessKey,
+		// Get S3 endpoint and region from environment or use defaults
+		endpoint := os.Getenv("S3_ENDPOINT")
+		region := os.Getenv("S3_REGION")
+		if region == "" {
+			region = "us-east-1"
+		}
+
+		consoleCreds := &s3client.S3Credentials{
+			AccessKey:    stsAccessKey,
+			SecretKey:    stsSecretKey,
+			SessionToken: sts,
+			Region:       region,
+			Endpoint:     endpoint,
 		}
 		sf := &auth.SessionFeatures{}
 		sf.HideMenu = true

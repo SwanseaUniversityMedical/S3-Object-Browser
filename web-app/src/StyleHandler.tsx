@@ -41,7 +41,7 @@ const StyleHandler = ({ children }: IStyleHandler) => {
 
   return (
     <Fragment>
-      <GlobalStyles />
+      {React.createElement(GlobalStyles as any)}
       <ThemeHandler darkMode={darkMode} customTheme={thm}>
         {children}
       </ThemeHandler>

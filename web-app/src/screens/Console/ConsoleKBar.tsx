@@ -16,6 +16,7 @@
 import * as React from "react";
 import { Fragment } from "react";
 import { KBarProvider } from "kbar";
+import { useNavigate } from "react-router-dom";
 import Console from "./Console";
 import { useSelector } from "react-redux";
 import CommandBar from "./CommandBar";
@@ -26,10 +27,19 @@ import AnonymousAccess from "../AnonymousAccess/AnonymousAccess";
 import LicenseConsentModal from "./License/LicenseConsentModal";
 
 const ConsoleKBar = () => {
+  const navigate = useNavigate();
   const features = useSelector(selFeatures);
   const anonymousMode = useSelector(
     (state: AppState) => state.system.anonymousMode,
   );
+  const userLoggedIn = useSelector((state: AppState) => state.system.loggedIn);
+
+  // Safety check: if not logged in, redirect to login
+  React.useEffect(() => {
+    if (!userLoggedIn && !anonymousMode) {
+      navigate("/login");
+    }
+  }, [userLoggedIn, anonymousMode, navigate]);
 
   // if we are hiding the menu also disable the k-bar so just return console
   if (features?.includes("hide-menu")) {

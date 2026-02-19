@@ -20,8 +20,8 @@ import { Box } from "mds";
 export default function Copyright() {
   return (
     <Box className={"muted"} sx={{ textAlign: "center" }}>
-      {"Copyright © "}
-      <a href="https://min.io/?ref=con">MinIO</a> {new Date().getFullYear()}
+      {"Copyright © Object Browser "}
+      {new Date().getFullYear()}
       {"."}
     </Box>
   );

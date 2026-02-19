@@ -1,0 +1,18 @@
+apiVersion: v2
+name: object-browser
+description: Helm chart for Object Browser - S3 management UI with Keycloak OAuth
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - s3
+  - minio
+  - keycloak
+  - oauth
+  - object-storage
+home: https://github.com/yourusername/object-browser
+sources:
+  - https://github.com/yourusername/object-browser
+maintainers:
+  - name: Object Browser Contributors
+    email: support@example.com

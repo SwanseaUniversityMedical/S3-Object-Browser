@@ -1,0 +1,123 @@
+{{- if .Values.minio.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.minio.persistence.size }}
+  {{- if .Values.minio.persistence.storageClassName }}
+  storageClassName: {{ .Values.minio.persistence.storageClassName }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: minio
+spec:
+  ports:
+    - port: {{ .Values.minio.server.port }}
+      targetPort: {{ .Values.minio.server.port }}
+      name: api
+    - port: {{ .Values.minio.server.consolePort }}
+      targetPort: {{ .Values.minio.server.consolePort }}
+      name: console
+  selector:
+    app: minio
+  type: {{ .Values.minio.service.type }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-secret
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  root-user: {{ .Values.minio.auth.rootUser | quote }}
+  root-password: {{ .Values.minio.auth.rootPassword | quote }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.minio.replicas }}
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+      - name: minio
+        image: "{{ .Values.minio.image.repository }}:{{ .Values.minio.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: {{ .Values.minio.server.port }}
+          name: api
+        - containerPort: {{ .Values.minio.server.consolePort }}
+          name: console
+        command:
+          - minio
+          - server
+          - /data
+          - --console-address
+          - ":{{ .Values.minio.server.consolePort }}"
+        env:
+        - name: MINIO_ROOT_USER
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: root-user
+        - name: MINIO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: minio-secret
+              key: root-password
+        {{- if .Values.minio.oauth.enabled }}
+        - name: MINIO_IDENTITY_OIDC_CONFIG_URL
+          value: {{ .Values.minio.oauth.configURL | quote }}
+        - name: MINIO_IDENTITY_OIDC_CLIENT_ID
+          value: {{ .Values.minio.oauth.clientID | quote }}
+        - name: MINIO_IDENTITY_OIDC_CLIENT_SECRET
+          value: {{ .Values.minio.oauth.clientSecret | quote }}
+        - name: MINIO_IDENTITY_OIDC_REDIRECT_URI
+          value: {{ .Values.minio.oauth.redirectURI | quote }}
+        - name: MINIO_IDENTITY_OIDC_DISPLAY_NAME
+          value: {{ .Values.minio.oauth.displayName | quote }}
+        - name: MINIO_IDENTITY_OIDC_SCOPES
+          value: {{ .Values.minio.oauth.scopes | quote }}
+        {{- end }}
+        resources:
+          requests:
+            memory: {{ .Values.minio.resources.requests.memory }}
+            cpu: {{ .Values.minio.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.minio.resources.limits.memory }}
+            cpu: {{ .Values.minio.resources.limits.cpu }}
+        volumeMounts:
+        - name: minio-storage
+          mountPath: /data
+        livenessProbe:
+          httpGet:
+            path: /minio/health/live
+            port: {{ .Values.minio.server.port }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: minio-storage
+        persistentVolumeClaim:
+          claimName: minio-pvc
+{{- end }}

@@ -24,6 +24,7 @@ import { useSelector } from "react-redux";
 import { getFetchConfigurationAsync } from "./loginThunks";
 import { resetForm } from "./loginSlice";
 import StrategyForm from "./StrategyForm";
+import KeycloakLogin from "./KeycloakLogin";
 import { getLogoApplicationVariant, getLogoVar } from "../../config";
 import { RedirectRule } from "api/consoleApi";
 import { redirectRules } from "./login.utils";
@@ -74,16 +75,8 @@ const Login = () => {
 
   switch (loginStrategy.loginStrategy) {
     case loginStrategyType.form: {
-      let redirectItems: RedirectRule[] = [];
-
-      if (
-        loginStrategy.redirectRules &&
-        loginStrategy.redirectRules.length > 0
-      ) {
-        redirectItems = [...loginStrategy.redirectRules].sort(redirectRules);
-      }
-
-      loginComponent = <StrategyForm redirectRules={redirectItems} />;
+      // Use Keycloak OAuth flow - no credentials stored in browser
+      loginComponent = <KeycloakLogin />;
       break;
     }
     default:

@@ -36,6 +36,10 @@ const LogoutPage = () => {
       localStorage.setItem("redirect-path", "");
       dispatch(resetSession());
       clearSession();
+      // Clear OAuth session storage
+      sessionStorage.removeItem("oauth_state");
+      sessionStorage.removeItem("oauth_nonce");
+      sessionStorage.removeItem("oauth_idp_url");
 
       navigate("/login");
       window.location.reload(); //reset-all redux states etc. by force reloading.

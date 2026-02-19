@@ -29,8 +29,12 @@ import (
 	"github.com/go-openapi/swag"
 	"github.com/minio/console/api/operations"
 	"github.com/minio/console/api/operations/public"
-	xnet "github.com/minio/pkg/v3/net"
 )
+
+var allowedS3Endpoints = []string{
+	"s3.amazonaws.com",          // Example: AWS S3
+	"my-custom-s3-endpoint.com", // Example: Custom S3-compatible endpoint
+}
 
 func registerPublicObjectsHandlers(api *operations.ConsoleAPI) {
 	api.PublicDownloadSharedObjectHandler = public.DownloadSharedObjectHandlerFunc(func(params public.DownloadSharedObjectParams) middleware.Responder {
@@ -42,15 +46,24 @@ func registerPublicObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 }
 
+func isAllowedS3Endpoint(host string) bool {
+	for _, allowed := range allowedS3Endpoints {
+		if host == allowed {
+			return true
+		}
+	}
+	return false
+}
+
 func getDownloadPublicObjectResponse(params public.DownloadSharedObjectParams) (middleware.Responder, *CodedAPIError) {
 	ctx := params.HTTPRequest.Context()
 
-	inputURLDecoded, err := decodeMinIOStringURL(params.URL)
+	inputURLDecoded, err := decodeS3StringURL(params.URL)
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
 	if inputURLDecoded == nil {
-		return nil, ErrorWithContext(ctx, ErrDefault, fmt.Errorf("decoded url is null"))
+		return nil, ErrorWithContext(ctx, ErrDefault, fmt.Errorf("decoded URL is null"))
 	}
 
 	req, err := http.NewRequest(http.MethodGet, *inputURLDecoded, nil)
@@ -91,21 +104,21 @@ func getDownloadPublicObjectResponse(params public.DownloadSharedObjectParams) (
 	}), nil
 }
 
-// decodeMinIOStringURL decodes url and validates is a MinIO url endpoint
-func decodeMinIOStringURL(inputURL string) (*string, error) {
+// decodeS3StringURL decodes URL and validates it against allowed S3 endpoints
+func decodeS3StringURL(inputURL string) (*string, error) {
 	decodedURL, err := base64.RawURLEncoding.DecodeString(inputURL)
 	if err != nil {
 		return nil, err
 	}
 
 	// Validate input URL
-	parsedURL, err := xnet.ParseHTTPURL(string(decodedURL))
+	parsedURL, err := url.Parse(string(decodedURL))
 	if err != nil {
 		return nil, err
 	}
-	// Ensure incoming url points to MinIO Server
-	minIOHost := getMinIOEndpoint()
-	if parsedURL.Host != minIOHost {
+
+	// Ensure incoming URL points to an allowed S3 endpoint
+	if !isAllowedS3Endpoint(parsedURL.Host) {
 		return nil, ErrForbidden
 	}
 	return swag.String(string(decodedURL)), nil

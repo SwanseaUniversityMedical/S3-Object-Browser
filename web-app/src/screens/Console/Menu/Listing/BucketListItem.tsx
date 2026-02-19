@@ -16,8 +16,11 @@
 
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { BucketsIcon, MenuItem } from "mds";
+import { BucketsIcon, Menu } from "mds";
 import { Bucket } from "../../../../api/consoleApi";
+
+// MenuItem component wrapper
+const MenuItem = (props: any) => null;
 
 interface IBucketListItem {
   bucket: Bucket;

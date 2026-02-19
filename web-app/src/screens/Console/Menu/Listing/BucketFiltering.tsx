@@ -14,17 +14,19 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import React, { RefObject, useRef } from "react";
-import { Box, InputBox, MenuItem, SearchIcon } from "mds";
+import React from "react";
+import { Box, InputBox, Menu, SearchIcon } from "mds";
 import get from "lodash/get";
 import { useTheme } from "styled-components";
 import { AppState, useAppDispatch } from "../../../../store";
 import { menuOpen, setFilterBucket } from "../../../../systemSlice";
 import { useSelector } from "react-redux";
 
+// MenuItem component wrapper
+const MenuItem = (props: any) => null;
+
 const BucketFiltering = () => {
   const theme = useTheme();
-  const ref = useRef<HTMLInputElement>(null);
   const dispatch = useAppDispatch();
   const bucketFilter = useSelector(
     (state: AppState) => state.system.filterBucketList,
@@ -35,7 +37,6 @@ const BucketFiltering = () => {
 
   const expandSearchBox = () => {
     dispatch(menuOpen(true));
-    ref.current?.focus();
   };
 
   return (
@@ -80,7 +81,6 @@ const BucketFiltering = () => {
             dispatch(setFilterBucket(e.target.value));
           }}
           startIcon={<SearchIcon />}
-          ref={ref as unknown as RefObject<HTMLInputElement>}
         />
       </Box>
     </>

@@ -1,0 +1,191 @@
+{{- if .Values.objectBrowser.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: object-browser-config
+  namespace: {{ .Release.Namespace }}
+data:
+  # S3 Configuration
+  CONSOLE_S3_SERVER: {{ .Values.objectBrowser.s3.server | quote }}
+  CONSOLE_S3_REGION: {{ .Values.objectBrowser.s3.region | quote }}
+  
+  # Security Configuration
+  CONSOLE_PBKDF_PASSPHRASE: {{ .Values.objectBrowser.security.pbkdfPassphrase | quote }}
+  CONSOLE_PBKDF_SALT: {{ .Values.objectBrowser.security.pbkdfSalt | quote }}
+  
+  # Audit Logging
+  CONSOLE_AUDIT_ENABLED: {{ .Values.objectBrowser.security.auditEnabled | quote }}
+  CONSOLE_AUDIT_BUFFER_SIZE: {{ .Values.objectBrowser.security.auditBufferSize | quote }}
+  CONSOLE_AUDIT_LOG_LEVEL: {{ .Values.objectBrowser.security.auditLogLevel | quote }}
+  
+  # CSRF Protection
+  CONSOLE_CSRF_ENABLED: {{ .Values.objectBrowser.security.csrfEnabled | quote }}
+  CONSOLE_CSRF_TOKEN_EXPIRY: {{ .Values.objectBrowser.security.csrfTokenExpiry | quote }}
+  CONSOLE_CSRF_COOKIE_SECURE: {{ .Values.objectBrowser.security.csrfCookieSecure | quote }}
+  
+  # Rate Limiting
+  CONSOLE_RATE_LIMIT_ENABLED: {{ .Values.objectBrowser.security.rateLimitEnabled | quote }}
+  CONSOLE_RATE_LIMIT_WINDOW_SECONDS: {{ .Values.objectBrowser.security.rateLimitWindowSeconds | quote }}
+  CONSOLE_RATE_LIMIT_LIST_OPS: {{ .Values.objectBrowser.security.rateLimitListOps | quote }}
+  CONSOLE_RATE_LIMIT_UPLOAD_OPS: {{ .Values.objectBrowser.security.rateLimitUploadOps | quote }}
+  CONSOLE_RATE_LIMIT_DOWNLOAD_OPS: {{ .Values.objectBrowser.security.rateLimitDownloadOps | quote }}
+  CONSOLE_RATE_LIMIT_DELETE_OPS: {{ .Values.objectBrowser.security.rateLimitDeleteOps | quote }}
+  CONSOLE_RATE_LIMIT_GLOBAL: {{ .Values.objectBrowser.security.rateLimitGlobal | quote }}
+  
+  # Session Configuration
+  CONSOLE_SESSION_TIMEOUT_SECONDS: {{ .Values.objectBrowser.security.sessionTimeoutSeconds | quote }}
+  CONSOLE_SESSION_IDLE_TIMEOUT_SECONDS: {{ .Values.objectBrowser.security.sessionIdleTimeoutSeconds | quote }}
+  CONSOLE_SESSION_COOKIE_SECURE: {{ .Values.objectBrowser.security.sessionCookieSecure | quote }}
+  CONSOLE_SESSION_COOKIE_HTTPONLY: {{ .Values.objectBrowser.security.sessionCookieHttpOnly | quote }}
+  CONSOLE_SESSION_COOKIE_SAMESITE: {{ .Values.objectBrowser.security.sessionCookieSameSite | quote }}
+  
+  # Keycloak OAuth Configuration
+  CONSOLE_KEYCLOAK_ENABLED: {{ .Values.objectBrowser.keycloak.enabled | quote }}
+  CONSOLE_IDP_URL: {{ .Values.objectBrowser.keycloak.idpUrl | quote }}
+  CONSOLE_IDP_PUBLIC_URL: {{ .Values.objectBrowser.keycloak.idpPublicUrl | quote }}
+  CONSOLE_IDP_CLIENT_ID: {{ .Values.objectBrowser.keycloak.clientId | quote }}
+  CONSOLE_IDP_CALLBACK: {{ .Values.objectBrowser.keycloak.callback | quote }}
+  CONSOLE_IDP_SCOPES: {{ .Values.objectBrowser.keycloak.scopes | quote }}
+  CONSOLE_IDP_INSECURE_SKIP_VERIFY: {{ .Values.objectBrowser.keycloak.insecureSkipVerify | quote }}
+  
+  # Logging Configuration
+  CONSOLE_LOG_LEVEL: {{ .Values.objectBrowser.logging.level | quote }}
+  CONSOLE_LOG_FORMAT: {{ .Values.objectBrowser.logging.format | quote }}
+  CONSOLE_LOG_REQUEST_BODY: {{ .Values.objectBrowser.logging.requestBody | quote }}
+  CONSOLE_LOG_RESPONSE_BODY: {{ .Values.objectBrowser.logging.responseBody | quote }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: object-browser-secret
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  console-idp-client-secret: {{ .Values.objectBrowser.keycloak.clientSecret | quote }}
+  console-idp-hmac-passphrase: {{ .Values.objectBrowser.keycloak.hmacPassphrase | quote }}
+  console-idp-hmac-salt: {{ .Values.objectBrowser.keycloak.hmacSalt | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: object-browser
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: object-browser
+spec:
+  ports:
+    - port: {{ .Values.objectBrowser.service.port }}
+      targetPort: {{ .Values.objectBrowser.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    app: object-browser
+  type: {{ .Values.objectBrowser.service.type }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: object-browser
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: object-browser
+spec:
+  replicas: {{ .Values.objectBrowser.replicas }}
+  selector:
+    matchLabels:
+      app: object-browser
+  template:
+    metadata:
+      labels:
+        app: object-browser
+    spec:
+      containers:
+      - name: object-browser
+        image: "{{ .Values.objectBrowser.image.repository }}:{{ .Values.objectBrowser.image.tag }}"
+        imagePullPolicy: {{ .Values.objectBrowser.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.objectBrowser.service.targetPort }}
+          name: http
+        command:
+          - /console
+          - server
+        envFrom:
+        - configMapRef:
+            name: object-browser-config
+        env:
+        - name: CONSOLE_IDP_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: object-browser-secret
+              key: console-idp-client-secret
+        - name: CONSOLE_IDP_HMAC_PASSPHRASE
+          valueFrom:
+            secretKeyRef:
+              name: object-browser-secret
+              key: console-idp-hmac-passphrase
+        - name: CONSOLE_IDP_HMAC_SALT
+          valueFrom:
+            secretKeyRef:
+              name: object-browser-secret
+              key: console-idp-hmac-salt
+        resources:
+          requests:
+            memory: {{ .Values.objectBrowser.resources.requests.memory }}
+            cpu: {{ .Values.objectBrowser.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.objectBrowser.resources.limits.memory }}
+            cpu: {{ .Values.objectBrowser.resources.limits.cpu }}
+        {{- if .Values.objectBrowser.healthcheck.enabled }}
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.objectBrowser.service.targetPort }}
+          initialDelaySeconds: {{ .Values.objectBrowser.healthcheck.initialDelaySeconds }}
+          periodSeconds: {{ .Values.objectBrowser.healthcheck.periodSeconds }}
+          timeoutSeconds: {{ .Values.objectBrowser.healthcheck.timeoutSeconds }}
+          failureThreshold: {{ .Values.objectBrowser.healthcheck.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: {{ .Values.objectBrowser.service.targetPort }}
+          initialDelaySeconds: {{ .Values.objectBrowser.healthcheck.initialDelaySeconds }}
+          periodSeconds: {{ .Values.objectBrowser.healthcheck.periodSeconds }}
+          timeoutSeconds: {{ .Values.objectBrowser.healthcheck.timeoutSeconds }}
+          failureThreshold: {{ .Values.objectBrowser.healthcheck.failureThreshold }}
+        {{- end }}
+{{- if .Values.objectBrowser.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: object-browser-ingress
+  namespace: {{ .Release.Namespace }}
+  {{- if .Values.objectBrowser.ingress.annotations }}
+  annotations:
+    {{- toYaml .Values.objectBrowser.ingress.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.objectBrowser.ingress.className }}
+  ingressClassName: {{ .Values.objectBrowser.ingress.className }}
+  {{- end }}
+  rules:
+  {{- range .Values.objectBrowser.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+        {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: object-browser
+                port:
+                  number: {{ $.Values.objectBrowser.service.port }}
+        {{- end }}
+  {{- end }}
+  {{- if .Values.objectBrowser.ingress.tls }}
+  tls:
+    {{- toYaml .Values.objectBrowser.ingress.tls | nindent 4 }}
+  {{- end }}
+{{- end }}
+{{- end }}

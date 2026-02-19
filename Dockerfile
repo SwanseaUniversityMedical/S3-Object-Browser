@@ -1,13 +1,20 @@
-ARG NODE_VERSION=18
+ARG NODE_VERSION=20
 
 FROM node:${NODE_VERSION}-bullseye AS ui
 
 WORKDIR /src/web-app
 
-COPY web-app/package.json web-app/yarn.lock web-app/.yarnrc.yml ./
+# Copy package files and install dependencies first  
+COPY web-app/package.json web-app/.yarnrc.yml ./
 RUN corepack enable && yarn install
 
-COPY web-app/ ./
+# Copy configuration files
+COPY web-app/tsconfig.json web-app/config-overrides.js ./
+
+# Copy source files
+COPY web-app/public ./public
+COPY web-app/src ./src
+
 RUN npx update-browserslist-db@latest && yarn build
 
 FROM golang:1.24.4 AS build

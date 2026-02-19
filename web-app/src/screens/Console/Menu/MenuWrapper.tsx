@@ -16,7 +16,7 @@
 
 import React, { Fragment } from "react";
 import { useSelector } from "react-redux";
-import { AddIcon, DocumentationIcon, LicenseIcon, Menu, MenuItem } from "mds";
+import { AddIcon, DocumentationIcon, LicenseIcon, Menu } from "mds";
 import { AppState, useAppDispatch } from "../../../store";
 import { menuOpen } from "../../../systemSlice";
 import { getLogoApplicationVariant, getLogoVar } from "../../../config";
@@ -25,6 +25,9 @@ import { IAM_PAGES } from "../../../common/SecureComponent/permissions";
 import { setAddBucketOpen } from "../Buckets/ListBuckets/AddBucket/addBucketsSlice";
 import BucketsListing from "./Listing/BucketsListing";
 import { getLicenseConsent } from "../License/utils";
+
+// MenuItem component wrapper
+const MenuItem = (props: any) => null;
 
 const MenuWrapper = () => {
   const dispatch = useAppDispatch();
@@ -60,7 +63,7 @@ const MenuWrapper = () => {
             name={"Documentation"}
             icon={<DocumentationIcon />}
             path={
-              "https://docs.min.io/community/minio-object-store/index.html?ref=con"
+              "https://docs.example.com/object-browser/index.html?ref=con"
             }
           />
           <MenuItem

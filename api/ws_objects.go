@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -128,7 +127,8 @@ func (wsc *wsMinioClient) objectManager(session *models.Principal) {
 					}
 
 					var buffer []ObjectResponse
-					for lsObj := range startObjectsListing(ctx, wsc.client, objectRqConfigs) {
+					objCh := startObjectsListing(ctx, wsc.client, objectRqConfigs)
+					for lsObj := range objCh {
 						if lsObj.Err != nil {
 							sendWSResponse(WSResponse{
 								RequestID:  messageRequest.RequestID,
@@ -152,7 +152,7 @@ func (wsc *wsMinioClient) objectManager(session *models.Principal) {
 								LastModified: lsObj.LastModified.Format(time.RFC3339),
 								VersionID:    lsObj.VersionID,
 								IsLatest:     lsObj.IsLatest,
-								DeleteMarker: lsObj.IsDeleteMarker,
+								DeleteMarker: lsObj.DeleteMarker,
 							}
 							buffer = append(buffer, objItem)
 						}
@@ -197,29 +197,15 @@ func (wsc *wsMinioClient) objectManager(session *models.Principal) {
 						return
 					}
 
-					clientIP := wsc.conn.remoteAddress()
-
-					s3Client, err := newS3BucketClient(session, objectRqConfigs.BucketName, objectRqConfigs.Prefix, clientIP)
-					if err != nil {
-						sendWSResponse(WSResponse{
-							RequestID:  messageRequest.RequestID,
-							Error:      ErrorWithContext(ctx, err),
-							Prefix:     messageRequest.Prefix,
-							BucketName: messageRequest.BucketName,
-						})
-
-						return
-					}
-
-					mcS3C := mcClient{client: s3Client}
-
 					var buffer []ObjectResponse
 
-					for lsObj := range startRewindListing(ctx, mcS3C, objectRqConfigs) {
+					objCh := startRewindListing(ctx, wsc.client, objectRqConfigs)
+
+					for lsObj := range objCh {
 						if lsObj.Err != nil {
 							sendWSResponse(WSResponse{
 								RequestID:  messageRequest.RequestID,
-								Error:      ErrorWithContext(ctx, lsObj.Err.ToGoError()),
+								Error:      ErrorWithContext(ctx, lsObj.Err),
 								Prefix:     messageRequest.Prefix,
 								BucketName: messageRequest.BucketName,
 							})
@@ -227,15 +213,13 @@ func (wsc *wsMinioClient) objectManager(session *models.Principal) {
 							continue
 						}
 
-						name := strings.Replace(lsObj.URL.Path, fmt.Sprintf("/%s/", objectRqConfigs.BucketName), "", 1)
-
 						objItem := ObjectResponse{
-							Name:         name,
+							Name:         lsObj.Key,
 							Size:         lsObj.Size,
-							LastModified: lsObj.Time.Format(time.RFC3339),
+							LastModified: lsObj.LastModified.Format(time.RFC3339),
 							VersionID:    lsObj.VersionID,
 							IsLatest:     lsObj.IsLatest,
-							DeleteMarker: lsObj.IsDeleteMarker,
+							DeleteMarker: lsObj.DeleteMarker,
 						}
 						buffer = append(buffer, objItem)
 

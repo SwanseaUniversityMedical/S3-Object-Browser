@@ -23,11 +23,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 
 	errorsApi "github.com/go-openapi/errors"
 	"github.com/minio/console/models"
 	"github.com/minio/console/pkg/auth"
+	"github.com/minio/console/pkg/s3client"
 	"github.com/minio/console/pkg/utils"
 	"github.com/minio/websocket"
 )
@@ -45,8 +47,8 @@ const (
 type wsMinioClient struct {
 	// websocket connection.
 	conn wsConn
-	// MinIO admin Client
-	client minioClient
+	// S3 Client
+	client *s3client.S3Client
 }
 
 // WSConn interface with all functions to be implemented
@@ -149,21 +151,34 @@ func serveWS(w http.ResponseWriter, req *http.Request) {
 }
 
 func newWebSocketMinioClient(conn *websocket.Conn, claims *models.Principal, clientIP string) (*wsMinioClient, error) {
-	mClient, err := newMinioClient(claims, clientIP)
+	// Get S3 endpoint and region from environment or use defaults
+	endpoint := os.Getenv("S3_ENDPOINT")
+	region := os.Getenv("S3_REGION")
+	if region == "" {
+		region = "us-east-1"
+	}
+
+	// Get credentials from session token claims
+	s3Creds := &s3client.S3Credentials{
+		AccessKey:    claims.STSAccessKeyID,
+		SecretKey:    claims.STSSecretAccessKey,
+		SessionToken: claims.STSSessionToken,
+		Region:       region,
+		Endpoint:     endpoint,
+	}
+
+	s3Client, err := s3client.NewS3Client(s3Creds)
 	if err != nil {
-		LogError("error creating MinioClient:", err)
+		LogError("error creating S3 Client:", err)
 		return nil, err
 	}
 
 	// create a websocket connection interface implementation
 	// defining the connection to be used
 	wsConnection := wsConn{conn: conn}
-	// create a minioClient interface implementation
-	// defining the client to be used
-	minioClient := minioClient{client: mClient}
 
 	// create websocket client and handle request
-	wsMinioClient := &wsMinioClient{conn: wsConnection, client: minioClient}
+	wsMinioClient := &wsMinioClient{conn: wsConnection, client: s3Client}
 	return wsMinioClient, nil
 }
 

@@ -42,6 +42,8 @@ import { getMaxShareLinkExpTime } from "screens/Console/ObjectBrowser/objectBrow
 import { maxShareLinkExpTime } from "screens/Console/ObjectBrowser/objectBrowserSlice";
 import debounce from "lodash/debounce";
 
+const CopyToClipboardComponent = CopyToClipboard as any;
+
 interface IShareFileProps {
   open: boolean;
   bucketName: string;
@@ -228,7 +230,7 @@ const ShareFile = ({
             >
               <ReadBox
                 actionButton={
-                  <CopyToClipboard text={shareURL}>
+                  <CopyToClipboardComponent text={shareURL}>
                     <Button
                       id={"copy-path"}
                       variant="regular"
@@ -245,7 +247,7 @@ const ShareFile = ({
                       }}
                       icon={<CopyIcon />}
                     />
-                  </CopyToClipboard>
+                  </CopyToClipboardComponent>
                 }
               >
                 {shareURL}

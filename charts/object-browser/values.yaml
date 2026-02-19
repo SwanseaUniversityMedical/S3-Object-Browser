@@ -1,0 +1,303 @@
+# Object Browser Helm Chart Values
+# This is a YAML-formatted file for Helm chart configuration
+
+# Global settings
+global:
+  environment: production
+
+# PostgreSQL configuration
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "15-alpine"
+  auth:
+    database: keycloak
+    username: keycloak
+    password: "keycloak_password"
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClassName: standard
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# Keycloak configuration
+keycloak:
+  enabled: true
+  image:
+    repository: quay.io/keycloak/keycloak
+    tag: "23.0"
+  replicas: 1
+  
+  # Keycloak environment variables
+  environment:
+    KC_DB: postgres
+    KC_HOSTNAME: localhost
+    KC_HOSTNAME_PORT: "8080"
+    KC_HOSTNAME_STRICT: "false"
+    KC_HOSTNAME_STRICT_HTTPS: "false"
+    KC_HTTP_ENABLED: "true"
+    KC_HEALTH_ENABLED: "true"
+    KC_LOG_LEVEL: "info"
+    KC_TRANSACTION_XA_ENABLED: "false"
+    KEYCLOAK_ADMIN: admin
+    KEYCLOAK_ADMIN_PASSWORD: "admin"
+  
+  # Import realm on startup
+  realmImport: true
+  
+  service:
+    type: ClusterIP
+    port: 8080
+  
+  ingress:
+    enabled: false
+    className: nginx
+    annotations: {}
+    hosts:
+      - host: keycloak.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  
+  persistence:
+    enabled: false
+  
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  
+  healthcheck:
+    enabled: true
+    initialDelaySeconds: 120
+    periodSeconds: 15
+    timeoutSeconds: 10
+    failureThreshold: 20
+
+# MinIO S3 storage - Primary
+minio:
+  enabled: true
+  image:
+    repository: minio/minio
+    tag: latest
+  
+  # Credentials
+  auth:
+    rootUser: minioadmin
+    rootPassword: minioadmin
+  
+  # Number of replicas
+  replicas: 1
+  
+  # Server configuration
+  server:
+    port: 9000
+    consolePort: 9001
+  
+  # MinIO OIDC/OAuth configuration
+  oauth:
+    enabled: true
+    configURL: "http://keycloak:8080/realms/object-browser/.well-known/openid-configuration"
+    clientID: "object-browser-client"
+    clientSecret: "object-browser-client-secret"
+    redirectURI: "http://localhost:9090/oauth_callback"
+    displayName: "Keycloak"
+    scopes: "openid,profile,email"
+  
+  # Storage
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClassName: standard
+  
+  service:
+    type: ClusterIP
+    ports:
+      api: 9000
+      console: 9001
+  
+  ingress:
+    enabled: false
+    className: nginx
+    annotations: {}
+    hosts:
+      - host: minio.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+# MinIO S3 storage - Secondary (optional)
+minio2:
+  enabled: false
+  image:
+    repository: minio/minio
+    tag: latest
+  
+  auth:
+    rootUser: admin2
+    rootPassword: password2
+  
+  replicas: 1
+  
+  server:
+    port: 9010
+    consolePort: 9011
+  
+  oauth:
+    enabled: true
+    configURL: "http://keycloak:8080/realms/object-browser/.well-known/openid-configuration"
+    clientID: "object-browser-client"
+    clientSecret: "object-browser-client-secret"
+    redirectURI: "http://localhost:9090/oauth_callback"
+  
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClassName: standard
+  
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+
+# Object Browser application
+objectBrowser:
+  enabled: true
+  image:
+    repository: object-browser
+    tag: latest
+    pullPolicy: IfNotPresent
+  
+  replicas: 1
+  
+  ## Service configuration
+  service:
+    type: ClusterIP
+    port: 9090
+    targetPort: 9090
+  
+  ## Ingress configuration
+  ingress:
+    enabled: false
+    className: nginx
+    annotations: {}
+    hosts:
+      - host: object-browser.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls: []
+  
+  ## S3 configuration
+  s3:
+    server: "http://minio:9000"
+    region: "us-east-1"
+  
+  ## Security configuration
+  security:
+    # Encryption/Hashing
+    pbkdfPassphrase: "object-browser-secret-passphrase-min32-chars"
+    pbkdfSalt: "object-browser-secret-salt-min32-characters"
+    
+    # CSRF Protection
+    csrfEnabled: "true"
+    csrfTokenExpiry: "3600"
+    csrfCookieSecure: "false"  # Set to true in production with HTTPS
+    
+    # Session configuration
+    sessionTimeoutSeconds: "3600"
+    sessionIdleTimeoutSeconds: "1800"
+    sessionCookieSecure: "false"
+    sessionCookieHttpOnly: "true"
+    sessionCookieSameSite: "Strict"
+    
+    # Rate limiting
+    rateLimitEnabled: "true"
+    rateLimitWindowSeconds: "60"
+    rateLimitListOps: "100"
+    rateLimitUploadOps: "50"
+    rateLimitDownloadOps: "100"
+    rateLimitDeleteOps: "50"
+    rateLimitGlobal: "200"
+    
+    # Audit logging
+    auditEnabled: "true"
+    auditBufferSize: "10000"
+    auditLogLevel: "debug"
+  
+  ## Keycloak OAuth configuration
+  keycloak:
+    enabled: "true"
+    # Internal IDP URL (for backend-to-Keycloak communication)
+    idpUrl: "http://keycloak:8080/realms/object-browser"
+    # Public IDP URL (for browser-to-Keycloak redirects)
+    idpPublicUrl: "http://keycloak:8080/realms/object-browser"
+    clientId: "object-browser-client"
+    clientSecret: "object-browser-client-secret"
+    callback: "http://localhost:9090/oauth_callback"
+    hmacPassphrase: "object-browser-oidc-hmac-secret-min-32-chars"
+    hmacSalt: "object-browser-oidc-salt-characters-min-32"
+    scopes: "openid profile email"
+    insecureSkipVerify: "true"  # Only for development
+  
+  ## Logging configuration
+  logging:
+    level: "debug"
+    format: "json"
+    requestBody: "true"
+    responseBody: "false"
+  
+  ## Resource limits
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  
+  ## Health check configuration
+  healthcheck:
+    enabled: true
+    initialDelaySeconds: 40
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+# Network policy
+networkPolicy:
+  enabled: false
+
+# Pod security policy
+podSecurityPolicy:
+  enabled: false
+
+# Monitoring and logging
+monitoring:
+  enabled: false
+  prometheus:
+    enabled: false
+    port: 9090

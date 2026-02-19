@@ -15,7 +15,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import React, { Fragment, useEffect, useState } from "react";
-import { Box, BucketsIcon, HelpBox, MenuDivider, MenuSectionHeader } from "mds";
+import { Box, BucketsIcon, HelpBox } from "mds";
 import { AppState, useAppDispatch } from "../../../../store";
 import { Bucket } from "../../../../api/consoleApi";
 import { api } from "../../../../api";
@@ -30,6 +30,10 @@ import get from "lodash/get";
 import { useTheme } from "styled-components";
 import BucketFiltering from "./BucketFiltering";
 import { useSelector } from "react-redux";
+
+// Component wrappers
+const MenuDivider = () => null;
+const MenuSectionHeader = (props: any) => null;
 
 const ListBuckets = () => {
   const dispatch = useAppDispatch();

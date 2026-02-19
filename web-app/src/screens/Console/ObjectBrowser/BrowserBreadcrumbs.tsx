@@ -40,6 +40,8 @@ import { AppState, useAppDispatch } from "../../../store";
 import { setVersionsModeEnabled } from "./objectBrowserSlice";
 import { getSessionGrantsWildCard } from "../Buckets/ListBuckets/UploadPermissionUtils";
 
+const CopyToClipboardComponent = CopyToClipboard as any;
+
 const CreatePathModal = withSuspense(
   React.lazy(
     () => import("../Buckets/ListBuckets/Objects/ListObjects/CreatePathModal"),
@@ -254,7 +256,7 @@ const BrowserBreadcrumbs = ({
           goBackFunction={goBackFunction}
           additionalOptions={
             <Fragment>
-              <CopyToClipboard text={`${bucketName}/${splitPaths.join("/")}`}>
+              <CopyToClipboardComponent text={`${bucketName}/${splitPaths.join("/")}`}>
                 <Button
                   id={"copy-path"}
                   icon={
@@ -279,7 +281,7 @@ const BrowserBreadcrumbs = ({
                     marginRight: 5,
                   }}
                 />
-              </CopyToClipboard>
+              </CopyToClipboardComponent>
               <Box className={"additionalOptions"}>{additionalOptions}</Box>
             </Fragment>
           }

@@ -19,6 +19,9 @@ import { FixedSizeList as List } from "react-window";
 import InfiniteLoader from "react-window-infinite-loader";
 import { AutoSizer } from "react-virtualized";
 
+const InfiniteLoaderComponent = InfiniteLoader as any;
+const ListComponent = List as any;
+
 interface IVirtualizedList {
   rowRenderFunction: (index: number) => ReactElement | null;
   totalItems: number;
@@ -52,17 +55,18 @@ const VirtualizedList = ({
 
   return (
     <Fragment>
-      <InfiniteLoader
+      <InfiniteLoaderComponent
         isItemLoaded={isItemLoaded}
         loadMoreItems={loadMoreItems}
         itemCount={totalItems}
       >
+        {/* @ts-ignore */}
         {({ onItemsRendered, ref }) => (
           // @ts-ignore
           <AutoSizer>
             {({ width, height }) => {
               return (
-                <List
+                <ListComponent
                   itemSize={defaultHeight || 220}
                   height={height}
                   itemCount={totalItems}
@@ -72,12 +76,12 @@ const VirtualizedList = ({
                   className={"bucketsListing"}
                 >
                   {RenderItemLine}
-                </List>
+                </ListComponent>
               );
             }}
           </AutoSizer>
         )}
-      </InfiniteLoader>
+      </InfiniteLoaderComponent>
     </Fragment>
   );
 };

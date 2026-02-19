@@ -36,6 +36,7 @@ services:
       - --db-url=jdbc:postgresql://postgres:5432/keycloak
       - --db-username=keycloak
       - --db-password=keycloak_password
+      - --import-realm
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -155,8 +156,8 @@ services:
       # S3 Configuration
       # ========================================================================
       # Direct S3 login (for basic testing)
-      CONSOLE_S3_SERVER: "http://minio:9000"
-      CONSOLE_S3_REGION: "us-east-1"
+      CONSOLE_MINIO_SERVER: "http://minio:9000"
+      CONSOLE_MINIO_REGION: "us-east-1"
       
       # ========================================================================
       # Security Configuration - Phase 4 Implementation
@@ -236,7 +237,8 @@ services:
       # Method 2: Keycloak OIDC (STS First)
       # Only uncomment after Keycloak is configured with Object Browser realm
       CONSOLE_KEYCLOAK_ENABLED: "true"
-      CONSOLE_IDP_URL: "http://keycloak:8080/realms/object-browser"
+      CONSOLE_IDP_URL: "http://keycloak:8080/realms/object-browser"  # Internal URL for backend
+      CONSOLE_IDP_PUBLIC_URL: "http://localhost:8080/realms/object-browser"  # Public URL for browser
       CONSOLE_IDP_CLIENT_ID: "object-browser-client"
       CONSOLE_IDP_CLIENT_SECRET: "object-browser-client-secret"
       CONSOLE_IDP_CALLBACK: "http://localhost:9090/oauth_callback"
@@ -246,8 +248,8 @@ services:
       CONSOLE_IDP_INSECURE_SKIP_VERIFY: "true"   # Only for development
       
       # Method 3: Direct S3 Credentials (Default/Test User)
-      CONSOLE_ACCESS_KEY: "minioadmin"
-      CONSOLE_SECRET_KEY: "minioadmin"
+      S3_ACCESS_KEY: "minioadmin"
+      S3_SECRET_KEY: "minioadmin"
       
       # ========================================================================
       # Logging Configuration
@@ -265,6 +267,11 @@ services:
       CONSOLE_SESSION_COOKIE_SECURE: "false"  # Set to true in production with HTTPS
       CONSOLE_SESSION_COOKIE_HTTPONLY: "true"
       CONSOLE_SESSION_COOKIE_SAMESITE: "Strict"
+      
+      # ========================================================================
+      # Allowed S3 Endpoints (for tenant isolation and security)
+      # ========================================================================
+      ALLOWED_S3_ENDPOINTS: "s3.amazonaws.com,my-custom-s3-endpoint.com"
     ports:
       - "9090:9090"
     networks:
