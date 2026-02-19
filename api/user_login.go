@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -168,7 +168,15 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 		SessionToken:    "",
 	}
 
-	sessionFeatures := &auth.SessionFeatures{}
+	// Get tenant ID from environment (binds this session to a specific tenant)
+	tenantID := os.Getenv("CONSOLE_TENANT_ID")
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	sessionFeatures := &auth.SessionFeatures{
+		TenantID: tenantID,
+	}
 	token, err := auth.NewEncryptedTokenForClient(credsValue, accessKey, sessionFeatures)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session token: %w", err)

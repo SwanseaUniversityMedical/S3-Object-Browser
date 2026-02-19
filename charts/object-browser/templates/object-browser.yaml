@@ -48,6 +48,13 @@ data:
   CONSOLE_IDP_SCOPES: {{ .Values.objectBrowser.keycloak.scopes | quote }}
   CONSOLE_IDP_INSECURE_SKIP_VERIFY: {{ .Values.objectBrowser.keycloak.insecureSkipVerify | quote }}
   
+  # Multi-Tenancy Configuration - MANDATORY
+  # Each UI instance is bound to exactly one tenant/CephObjectStore
+  # Users cannot access data outside their tenant context
+  # Tenant isolation is enforced server-side at the middleware level
+  CONSOLE_TENANT_ID: {{ .Values.objectBrowser.tenancy.tenantId | quote }}
+  CONSOLE_TENANT_NAME: {{ .Values.objectBrowser.tenancy.tenantName | quote }}
+  
   # Logging Configuration
   CONSOLE_LOG_LEVEL: {{ .Values.objectBrowser.logging.level | quote }}
   CONSOLE_LOG_FORMAT: {{ .Values.objectBrowser.logging.format | quote }}

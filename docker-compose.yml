@@ -248,6 +248,13 @@ services:
       CONSOLE_IDP_SCOPES: "openid profile email"
       CONSOLE_IDP_INSECURE_SKIP_VERIFY: "true"   # Only for development
       
+      # ========================================================================
+      # Multi-Tenancy Configuration - MANDATORY for tenant isolation
+      # ========================================================================
+      # Each UI instance is bound to exactly one tenant/CephObjectStore
+      # Users cannot access data outside their tenant context
+      CONSOLE_TENANT_ID: "default"
+      
       # Method 3: Direct S3 Credentials (Default/Test User)
       S3_ACCESS_KEY: "minioadmin"
       S3_SECRET_KEY: "minioadmin"

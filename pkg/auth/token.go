@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -74,6 +74,7 @@ type TokenClaims struct {
 	HideMenu           bool   `json:"hm,omitempty"`
 	ObjectBrowser      bool   `json:"ob,omitempty"`
 	CustomStyleOB      string `json:"customStyleOb,omitempty"`
+	TenantID           string `json:"tenantId,omitempty"`
 }
 
 // STSClaims claims struct for STS Token
@@ -86,6 +87,7 @@ type SessionFeatures struct {
 	HideMenu      bool
 	ObjectBrowser bool
 	CustomStyleOB string
+	TenantID      string
 }
 
 // SessionTokenAuthenticate takes a session token, decode it, extract claims and validate the signature
@@ -131,6 +133,7 @@ func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey 
 			tokenClaims.HideMenu = features.HideMenu
 			tokenClaims.ObjectBrowser = features.ObjectBrowser
 			tokenClaims.CustomStyleOB = features.CustomStyleOB
+			tokenClaims.TenantID = features.TenantID
 		}
 
 		encryptedClaims, err := encryptClaims(tokenClaims)

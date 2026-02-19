@@ -263,6 +263,24 @@ objectBrowser:
     scopes: "openid profile email"
     insecureSkipVerify: "true"  # Only for development
   
+  ## Multi-Tenancy Configuration - MANDATORY for tenant isolation
+  ## Each UI instance (Pod/Deployment) is bound to exactly one tenant/CephObjectStore
+  ## Users cannot access data outside their tenant context
+  ## Tenant isolation is enforced server-side at the middleware level
+  tenancy:
+    # Unique identifier for this tenant/CephObjectStore
+    # Each Object Browser deployment should have a unique tenantId
+    # Examples: "ceph-us-east", "ceph-eu-west", "default"
+    tenantId: "default"
+    
+    # Human-readable name for this tenant deployment
+    tenantName: "Default Tenant"
+    
+    # Optional: Namespace/segregation prefix for buckets
+    # If set, enforces buckets to have this prefix when created
+    # Prevents cross-tenant bucket access even if names collide
+    bucketPrefix: ""  # e.g., "tenant-default-" or leave empty
+  
   ## Logging configuration
   logging:
     level: "debug"

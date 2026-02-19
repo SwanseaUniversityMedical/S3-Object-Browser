@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -56,7 +56,7 @@ type S3ObjectInfo struct {
 // NewS3Client creates a new S3 client from credentials
 func NewS3Client(creds *S3Credentials) (*S3Client, error) {
 	ctx := context.Background()
-	
+
 	// Create AWS config with static credentials
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(creds.Region),
