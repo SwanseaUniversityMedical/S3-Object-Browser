@@ -405,35 +405,47 @@ func handleSPA(w http.ResponseWriter, r *http.Request) {
 	// Check if this is a protected route (not login, logout, or oauth_callback)
 	path := r.URL.Path
 	isPublicRoute := path == "/login" || path == "/logout" || path == "/oauth_callback"
-	
+
+	fmt.Printf("DEBUG handleSPA: path=%s, isPublicRoute=%v\n", path, isPublicRoute)
+
 	// For protected routes, verify authentication before serving the SPA
 	if !isPublicRoute {
 		// Check for valid session token
 		token, err := auth.GetTokenFromRequest(r)
+		fmt.Printf("DEBUG auth check: token=%q, err=%v\n", token, err)
+
 		if err == nil {
 			sessionToken, _ := auth.DecryptToken(token)
+			fmt.Printf("DEBUG after decrypt: sessionToken length=%d\n", len(sessionToken))
+
 			if len(sessionToken) > 0 {
 				// Validate the token
 				_, err := auth.ParseClaimsFromToken(string(sessionToken))
 				if err != nil {
 					// Invalid token - redirect to login
+					fmt.Printf("DEBUG: Invalid token, redirecting to login\n")
 					http.Redirect(w, r, "/login", http.StatusFound)
 					return
 				}
 				// Token is valid, continue serving the SPA
+				fmt.Printf("DEBUG: Token valid, serving SPA\n")
 			} else {
 				// No valid session token - redirect to login
+				fmt.Printf("DEBUG: Empty session token, redirecting to login\n")
 				http.Redirect(w, r, "/login", http.StatusFound)
 				return
 			}
 		} else if err == auth.ErrNoAuthToken {
 			// No auth token at all - redirect to login
+			fmt.Printf("DEBUG: No auth token, redirecting to login\n")
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
+		} else {
+			// Other errors - continue to serve (will fail at API level)
+			fmt.Printf("DEBUG: Other error (%v), continuing\n", err)
 		}
-		// Other errors - continue to serve (will fail at API level)
 	}
-	
+
 	basePath := "/"
 	// For SPA mode we will replace root base with a sub path if configured unless we received cp=y and cpb=/NEW/BASE
 	if v := r.URL.Query().Get("cp"); v == "y" {
