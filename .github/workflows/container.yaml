@@ -1,0 +1,46 @@
+name: S3 Object Browser Container
+
+on:
+  pull_request:
+    # Only consider PRs that change files for this asset, including ci scripts
+    paths:
+      - ".github/workflows/container.yaml"
+      - "./**"
+  push:
+    # Only release off of release and maintenance branches for this asset
+    branches:
+      - "master"
+    # Only consider pushes that change files for this asset, including ci scripts
+    paths:
+      - ".github/workflows/container.yaml"
+      - "./**"
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel early on pull requests if new commits are added,
+  # Don't cancel on release pushes
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  s3-object-browser-container:
+    uses: SwanseaUniversityMedical/workflows/.github/workflows/pr-and-release-container.yaml@v3.4.2-containers
+    with:
+      job-name: s3-object-browser-container
+      release-tag-format: 'v${version}-s3-object-browser-container'  
+      comment-pr: true
+      registry: ${{ vars.HARBOR_REGISTRY }}
+      registry-user: ${{ vars.HARBOR_USER }}
+      registry-repo: ${{ vars.HARBOR_PROJECT }}/${{ vars.HARBOR_REPO }}
+      cosign-public-key: ${{ vars.COSIGN_PUBLIC_KEY }}
+      build-file: ./Dockerfile
+      build-context: .
+      platforms: "linux/amd64,linux/arm64"
+    secrets:
+      cosign-private-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      cosign-password: ${{ secrets.COSIGN_PASSWORD }}
+      registry-token: ${{ secrets.HARBOR_TOKEN }}
