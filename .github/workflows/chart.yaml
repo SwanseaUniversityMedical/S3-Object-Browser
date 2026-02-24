@@ -1,0 +1,51 @@
+name: S3 Object Browser Chart
+
+on:
+  pull_request:
+    # Only consider PRs that change files for this asset, including ci scripts
+    paths:
+      - '.github/workflows/chart.yaml'
+      - 'charts/**'
+  push:
+    # Only release off of release and maintenance branches for this asset
+    branches:
+      - 'master'
+    # Only consider pushes that change files for this asset, including ci scripts
+    paths:
+      - '.github/workflows/chart.yaml'
+      - 'charts/**'
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel early on pull requests if new commits are added,
+  # Don't cancel on release pushes
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Job name must be unique across repo to target
+  # branch protection rules "required checks" properly!
+  s3-object-browser-chart:
+    uses: SwanseaUniversityMedical/workflows/.github/workflows/pr-and-release-chart.yaml@v3.1.4-charts
+    with:
+      job-name: s3-object-browser-chart
+      comment-pr: "true"
+      comment-release: "true"
+      registry: ${{ vars.HARBOR_REGISTRY }}
+      registry-user: ${{ vars.HARBOR_USER }}
+      registry-project: ${{ vars.HARBOR_PROJECT }}
+      registry-repo: s3-object-browser
+      release-tag-format: 'v${version}-s3-object-browser-chart'
+      cosign-public-key: ${{ vars.COSIGN_PUBLIC_KEY }}
+      chart: charts/fizzbuzz-crds
+      test-command: |
+        helm template $CHART --debug
+
+    secrets:
+      cosign-private-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
+      cosign-password: ${{ secrets.COSIGN_PASSWORD }}
+      registry-token: ${{ secrets.HARBOR_TOKEN }}
