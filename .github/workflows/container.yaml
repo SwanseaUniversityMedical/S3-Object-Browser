@@ -5,7 +5,8 @@ on:
     # Only consider PRs that change files for this asset, including ci scripts
     paths:
       - ".github/workflows/container.yaml"
-      - "./**"
+      - "Dockerfile"
+      - "**"
   push:
     # Only release off of release and maintenance branches for this asset
     branches:
@@ -13,7 +14,8 @@ on:
     # Only consider pushes that change files for this asset, including ci scripts
     paths:
       - ".github/workflows/container.yaml"
-      - "./**"
+      - "Dockerfile"
+      - "**"
 
 permissions:
   contents: write
