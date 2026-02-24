@@ -41,7 +41,7 @@ jobs:
       registry-repo: s3-object-browser
       release-tag-format: 'v${version}-s3-object-browser-chart'
       cosign-public-key: ${{ vars.COSIGN_PUBLIC_KEY }}
-      chart: charts/fizzbuzz-crds
+      chart: charts/s3-object-browser
       test-command: |
         helm template $CHART --debug
 
