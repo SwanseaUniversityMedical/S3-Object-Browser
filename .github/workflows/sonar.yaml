@@ -1,0 +1,31 @@
+name: S3 Object BrowserSonar
+
+on:
+  pull_request:
+    # Only consider PRs that change files for this asset, including ci scripts
+    paths:
+      - '.github/workflows/sonar.yaml'
+      - './**'
+  push:
+    # Only release off of release and maintenance branches for this asset
+    branches:
+      - 'master'
+    # Only consider pushes that change files for this asset, including ci scripts
+    paths:
+      - '.github/workflows/sonar.yaml'
+      - './**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Cancel early on pull requests if new commits are added,
+  # Don't cancel on release pushes..
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  s3-object-browser-sonar:
+    uses: SwanseaUniversityMedical/workflows/.github/workflows/generic-sonar.yaml@v1.1.1-generic-sonar
+    with:
+      project-key: "S3-Object-Browser"
+      sonar-url: ${{ vars.SONAR_DEV_URL }}
+    secrets:
+      sonar-token: ${{ secrets.SONAR_DEV_TOKEN }}
