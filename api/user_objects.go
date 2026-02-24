@@ -32,14 +32,14 @@ import (
 
 	"github.com/aws/smithy-go"
 
-	"github.com/minio/console/pkg/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	objectApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/object"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/klauspost/compress/zip"
-	"github.com/minio/console/api/operations"
-	objectApi "github.com/minio/console/api/operations/object"
-	"github.com/minio/console/models"
 	mc "github.com/minio/mc/cmd"
 	"github.com/minio/pkg/v3/mimedb"
 )

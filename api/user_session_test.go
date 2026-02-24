@@ -22,9 +22,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/minio/console/pkg/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/stretchr/testify/assert"
 )
 

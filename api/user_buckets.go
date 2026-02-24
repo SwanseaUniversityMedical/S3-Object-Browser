@@ -26,12 +26,12 @@ import (
 
 	"github.com/aws/smithy-go"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	bucketApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/bucket"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/token"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/swag"
-	"github.com/minio/console/api/operations"
-	bucketApi "github.com/minio/console/api/operations/bucket"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth/token"
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/mc/cmd"
 	"github.com/minio/minio-go/v7/pkg/policy"

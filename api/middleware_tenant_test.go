@@ -22,8 +22,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/minio/console/pkg/auth"
-	"github.com/minio/console/pkg/tenants"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/tenants"
 	"github.com/stretchr/testify/assert"
 )
 

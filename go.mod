@@ -1,4 +1,4 @@
-module github.com/minio/console
+module github.com/SwanseaUniversityMedical/S3-Object-Browser
 
 go 1.24.0
 

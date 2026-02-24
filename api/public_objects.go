@@ -24,11 +24,11 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/public"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/go-openapi/swag"
-	"github.com/minio/console/api/operations"
-	"github.com/minio/console/api/operations/public"
 )
 
 var allowedS3Endpoints = []string{

@@ -19,11 +19,11 @@ package api
 import (
 	"context"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	bucektApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/bucket"
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/minio/console/api/operations"
-	bucektApi "github.com/minio/console/api/operations/bucket"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 )
 
 func registerBucketQuotaHandlers(api *operations.ConsoleAPI) {

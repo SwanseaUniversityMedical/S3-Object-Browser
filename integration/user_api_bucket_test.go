@@ -33,7 +33,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/stretchr/testify/assert"
 )
 

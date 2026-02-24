@@ -26,11 +26,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/s3client"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 	errorsApi "github.com/go-openapi/errors"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth"
-	"github.com/minio/console/pkg/s3client"
-	"github.com/minio/console/pkg/utils"
 	"github.com/minio/websocket"
 )
 

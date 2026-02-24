@@ -31,8 +31,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	xnet "github.com/minio/pkg/v3/net"
 
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg"
 	mc "github.com/minio/mc/cmd"
 	"github.com/minio/mc/pkg/probe"
 )

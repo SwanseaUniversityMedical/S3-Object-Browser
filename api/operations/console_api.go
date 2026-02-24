@@ -36,13 +36,13 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
 
-	"github.com/minio/console/api/operations/auth"
-	"github.com/minio/console/api/operations/bucket"
-	"github.com/minio/console/api/operations/license"
-	"github.com/minio/console/api/operations/object"
-	"github.com/minio/console/api/operations/public"
-	"github.com/minio/console/api/operations/system"
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/bucket"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/license"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/object"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/public"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/system"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 )
 
 // NewConsoleAPI creates a new Console instance

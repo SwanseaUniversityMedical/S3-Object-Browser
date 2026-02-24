@@ -40,22 +40,22 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/minio/console/pkg/logger"
-	"github.com/minio/console/pkg/s3client"
-	"github.com/minio/console/pkg/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/s3client"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
 	"github.com/klauspost/compress/gzhttp"
 
-	portal_ui "github.com/minio/console/web-app"
+	portal_ui "github.com/SwanseaUniversityMedical/S3-Object-Browser/web-app"
 	"github.com/minio/pkg/v3/env"
 	"github.com/minio/pkg/v3/mimedb"
 	xnet "github.com/minio/pkg/v3/net"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/swag"
-	"github.com/minio/console/api/operations"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth"
 	"github.com/unrolled/secure"
 )
 
@@ -402,6 +402,38 @@ func (w *notFoundRedirectRespWr) Write(p []byte) (int, error) {
 
 // handleSPA handles the serving of the React Single Page Application
 func handleSPA(w http.ResponseWriter, r *http.Request) {
+	// Check if this is a protected route (not login, logout, or oauth_callback)
+	path := r.URL.Path
+	isPublicRoute := path == "/login" || path == "/logout" || path == "/oauth_callback"
+	
+	// For protected routes, verify authentication before serving the SPA
+	if !isPublicRoute {
+		// Check for valid session token
+		token, err := auth.GetTokenFromRequest(r)
+		if err == nil {
+			sessionToken, _ := auth.DecryptToken(token)
+			if len(sessionToken) > 0 {
+				// Validate the token
+				_, err := auth.ParseClaimsFromToken(string(sessionToken))
+				if err != nil {
+					// Invalid token - redirect to login
+					http.Redirect(w, r, "/login", http.StatusFound)
+					return
+				}
+				// Token is valid, continue serving the SPA
+			} else {
+				// No valid session token - redirect to login
+				http.Redirect(w, r, "/login", http.StatusFound)
+				return
+			}
+		} else if err == auth.ErrNoAuthToken {
+			// No auth token at all - redirect to login
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+		// Other errors - continue to serve (will fail at API level)
+	}
+	
 	basePath := "/"
 	// For SPA mode we will replace root base with a sub path if configured unless we received cp=y and cpb=/NEW/BASE
 	if v := r.URL.Query().Get("cp"); v == "y" {

@@ -22,9 +22,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/minio/console/pkg/auth"
-	"github.com/minio/console/pkg/logger"
-	"github.com/minio/console/pkg/tenants"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/tenants"
 )
 
 // TenantIsolationMiddleware enforces server-side tenant isolation

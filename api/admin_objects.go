@@ -20,7 +20,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/minio/console/pkg/s3client"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/s3client"
 )
 
 type objectsListOpts struct {

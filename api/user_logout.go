@@ -27,12 +27,12 @@ import (
 
 	"github.com/go-openapi/errors"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	authApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/idp/oauth2"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/minio/console/api/operations"
-	authApi "github.com/minio/console/api/operations/auth"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth/idp/oauth2"
 )
 
 func registerLogoutHandlers(api *operations.ConsoleAPI) {

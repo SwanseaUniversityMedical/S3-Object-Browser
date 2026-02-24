@@ -26,14 +26,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	authApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/s3client"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/minio/console/api/operations"
-	authApi "github.com/minio/console/api/operations/auth"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth"
-	"github.com/minio/console/pkg/logger"
-	"github.com/minio/console/pkg/s3client"
 )
 
 func registerLoginHandlers(api *operations.ConsoleAPI) {

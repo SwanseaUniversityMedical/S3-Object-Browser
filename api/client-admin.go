@@ -24,11 +24,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/minio/console/pkg"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg"
 
-	"github.com/minio/console/pkg/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/minio/madmin-go/v3"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
