@@ -26,6 +26,6 @@ jobs:
     uses: SwanseaUniversityMedical/workflows/.github/workflows/generic-sonar.yaml@v1.1.1-generic-sonar
     with:
       project-key: "S3-Object-Browser"
-      sonar-url: ${{ vars.SONAR_DEV_URL }}
+      sonar-url: ${{ vars.SONAR_URL }}
     secrets:
-      sonar-token: ${{ secrets.SONAR_DEV_TOKEN }}
+      sonar-token: ${{ secrets.SONAR_TOKEN }}
