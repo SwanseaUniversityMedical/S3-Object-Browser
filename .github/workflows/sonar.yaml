@@ -1,4 +1,4 @@
-name: S3 Object BrowserSonar
+name: S3 Object Browser Sonar
 
 on:
   pull_request:
