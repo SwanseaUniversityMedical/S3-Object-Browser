@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   s3-object-browser-sonar:
-    uses: SwanseaUniversityMedical/workflows/.github/workflows/generic-sonar.yaml@v1.1.1-generic-sonar
+    uses: SwanseaUniversityMedical/workflows/.github/workflows/generic-sonar.yaml@fix/generic-sonar-cert
     with:
       project-key: "S3-Object-Browser"
       sonar-url: ${{ vars.SONAR_URL }}
