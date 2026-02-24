@@ -14,8 +14,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import { CommonAPIValidation, api } from "../index";
-import { HttpResponse } from "../consoleApi";
+import { CommonAPIValidation, api } from "./index";
+import { HttpResponse } from "./consoleApi";
 
 describe("Security: Token Expiry and Re-authentication", () => {
   // Store original location
@@ -28,7 +28,7 @@ describe("Security: Token Expiry and Re-authentication", () => {
   });
 
   afterEach(() => {
-    window.location = originalLocation;
+    (window as any).location = originalLocation;
   });
 
   test("401 response should redirect to login", () => {
@@ -39,7 +39,7 @@ describe("Security: Token Expiry and Re-authentication", () => {
         message: "invalid session",
         detailedMessage: "",
       },
-    };
+    } as any;
 
     CommonAPIValidation(response);
 
@@ -54,7 +54,7 @@ describe("Security: Token Expiry and Re-authentication", () => {
         message: "invalid session",
         detailedMessage: "",
       },
-    };
+    } as any;
 
     CommonAPIValidation(response);
 
@@ -69,7 +69,7 @@ describe("Security: Token Expiry and Re-authentication", () => {
         message: "access denied",
         detailedMessage: "",
       },
-    };
+    } as any;
 
     CommonAPIValidation(response);
 
@@ -86,7 +86,7 @@ describe("Security: Token Expiry and Re-authentication", () => {
         message: "invalid session",
         detailedMessage: "",
       },
-    };
+    } as any;
 
     CommonAPIValidation(response);
 
@@ -99,7 +99,7 @@ describe("Security: Token Expiry and Re-authentication", () => {
       data: { success: true },
       status: 200,
       error: undefined,
-    };
+    } as any;
 
     CommonAPIValidation(response);
 

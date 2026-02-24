@@ -215,6 +215,8 @@ objectBrowser:
   s3:
     server: "http://minio:9000"
     region: "us-east-1"
+    accessKey: "minioadmin"
+    secretKey: "minioadmin"
   
   ## Security configuration
   security:

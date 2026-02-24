@@ -5,9 +5,10 @@ metadata:
   name: object-browser-config
   namespace: {{ .Release.Namespace }}
 data:
-  # S3 Configuration
-  CONSOLE_S3_SERVER: {{ .Values.objectBrowser.s3.server | quote }}
-  CONSOLE_S3_REGION: {{ .Values.objectBrowser.s3.region | quote }}
+  # S3 Configuration (Pure S3 API - AWS SDK v2)
+  # S3-compatible endpoint (MinIO, AWS S3, etc.) with no MinIO-specific functions
+  S3_ENDPOINT: {{ .Values.objectBrowser.s3.server | quote }}
+  S3_REGION: {{ .Values.objectBrowser.s3.region | quote }}
   
   # Security Configuration
   CONSOLE_PBKDF_PASSPHRASE: {{ .Values.objectBrowser.security.pbkdfPassphrase | quote }}
@@ -68,6 +69,8 @@ metadata:
   namespace: {{ .Release.Namespace }}
 type: Opaque
 stringData:
+  s3-access-key: {{ .Values.objectBrowser.s3.accessKey | quote }}
+  s3-secret-key: {{ .Values.objectBrowser.s3.secretKey | quote }}
   console-idp-client-secret: {{ .Values.objectBrowser.keycloak.clientSecret | quote }}
   console-idp-hmac-passphrase: {{ .Values.objectBrowser.keycloak.hmacPassphrase | quote }}
   console-idp-hmac-salt: {{ .Values.objectBrowser.keycloak.hmacSalt | quote }}
@@ -120,6 +123,16 @@ spec:
         - configMapRef:
             name: object-browser-config
         env:
+        - name: S3_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: object-browser-secret
+              key: s3-access-key
+        - name: S3_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: object-browser-secret
+              key: s3-secret-key
         - name: CONSOLE_IDP_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
