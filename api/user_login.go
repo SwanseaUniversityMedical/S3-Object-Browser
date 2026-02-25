@@ -26,6 +26,8 @@ import (
 	"os"
 	"strings"
 
+	jwtgo "github.com/golang-jwt/jwt/v4"
+
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
 	authApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
@@ -146,6 +148,11 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 		return nil, fmt.Errorf("failed to parse token response: %w", err)
 	}
 
+	tenantID, err := getTenantIDFromIDToken(tokenResponse.IDToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve tenant from id token: %w", err)
+	}
+
 	// Get S3 credentials from environment
 	accessKey := os.Getenv("S3_ACCESS_KEY")
 	secretKey := os.Getenv("S3_SECRET_KEY")
@@ -168,12 +175,6 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 		SessionToken:    "",
 	}
 
-	// Get tenant ID from environment (binds this session to a specific tenant)
-	tenantID := os.Getenv("CONSOLE_TENANT_ID")
-	if tenantID == "" {
-		tenantID = "default"
-	}
-
 	sessionFeatures := &auth.SessionFeatures{
 		TenantID: tenantID,
 	}
@@ -185,6 +186,47 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 	return &models.LoginResponse{
 		SessionID: token,
 	}, nil
+}
+
+func getTenantIDFromIDToken(idToken string) (string, error) {
+	if strings.TrimSpace(idToken) == "" {
+		return "", fmt.Errorf("id token is empty")
+	}
+	parser := jwtgo.NewParser()
+	claims := jwtgo.MapClaims{}
+	_, _, err := parser.ParseUnverified(idToken, &claims)
+	if err != nil {
+		return "", fmt.Errorf("unable to parse id token claims: %w", err)
+	}
+
+	groupsValue, ok := claims["groups"]
+	if !ok {
+		return "", fmt.Errorf("id token missing groups claim")
+	}
+
+	var groups []string
+	switch typed := groupsValue.(type) {
+	case []string:
+		groups = append(groups, typed...)
+	case []interface{}:
+		for _, v := range typed {
+			if s, ok := v.(string); ok {
+				groups = append(groups, s)
+			}
+		}
+	case string:
+		groups = append(groups, typed)
+	}
+
+	if len(groups) == 0 {
+		return "", fmt.Errorf("id token groups claim is empty")
+	}
+
+	tenantID := strings.TrimPrefix(groups[0], "/")
+	if tenantID == "" {
+		return "", fmt.Errorf("tenant id is empty")
+	}
+	return tenantID, nil
 }
 
 // login performs a check of S3 credentials, generates some claims and returns the jwt

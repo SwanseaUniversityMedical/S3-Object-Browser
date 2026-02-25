@@ -19,6 +19,7 @@ package tenants
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 // TenantID represents a unique tenant/CephObjectStore identifier
@@ -67,14 +68,16 @@ func ValidateTenantAccess(sessionTenant TenantID, requestedTenant TenantID) erro
 // ValidateBucketBelongsToTenant validates that a bucket access is within the session tenant
 // This should be called before any S3 operation on a bucket
 func ValidateBucketBelongsToTenant(sessionTenant TenantID, bucketName string) error {
-	// In a multi-tenant setup, buckets can be namespaced by tenant prefix
-	// Example: "tenant1-bucket-name", "tenant2-bucket-name"
-	// Or use a separate bucket list per tenant context
-	// For now, we enforce tenant context but don't restrict bucket names
-	// unless the bucket has explicit tenant prefix (optional feature)
-
 	if sessionTenant == "" {
 		return fmt.Errorf("session tenant not set")
+	}
+	if bucketName == "" {
+		return fmt.Errorf("bucket name not set")
+	}
+
+	prefix := sessionTenant.String() + "-"
+	if !strings.HasPrefix(bucketName, prefix) {
+		return fmt.Errorf("bucket %q does not belong to tenant %q", bucketName, sessionTenant.String())
 	}
 
 	return nil

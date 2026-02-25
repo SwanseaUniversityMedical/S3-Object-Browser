@@ -269,6 +269,8 @@ func setupGlobalMiddleware(handler http.Handler) http.Handler {
 	next = ContextMiddleware(next)
 	// handle cookie or authorization header for session
 	next = AuthenticationMiddleware(next)
+	// enforce server-side tenant isolation based on session claims
+	next = TenantIsolationMiddleware(next)
 	// handle debug logging
 	next = DebugLogMiddleware(next)
 

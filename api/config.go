@@ -21,6 +21,7 @@ import (
 	"crypto/x509"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -95,7 +96,15 @@ type MinIOConfig struct {
 var GlobalMinIOConfig MinIOConfig
 
 func getMinIOServer() string {
-	return strings.TrimSpace(env.Get(ConsoleMinIOServer, "http://localhost:9000"))
+	configured := strings.TrimSpace(env.Get(ConsoleMinIOServer, ""))
+	if configured != "" {
+		return configured
+	}
+	endpoint := strings.TrimSpace(os.Getenv("S3_ENDPOINT"))
+	if endpoint != "" {
+		return endpoint
+	}
+	return "http://localhost:9000"
 }
 
 func GetMinIORegion() string {

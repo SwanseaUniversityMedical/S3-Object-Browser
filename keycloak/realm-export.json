@@ -17,6 +17,9 @@
       "email": "testuser@example.com",
       "firstName": "Test",
       "lastName": "User",
+      "groups": [
+        "/tenant-1"
+      ],
       "credentials": [
         {
           "type": "password",
@@ -31,6 +34,9 @@
       "email": "admin@example.com",
       "firstName": "Admin",
       "lastName": "User",
+      "groups": [
+        "/tenant-2"
+      ],
       "credentials": [
         {
           "type": "password",
@@ -100,8 +106,28 @@
             "claim.name": "policy",
             "jsonType.label": "String"
           }
+        },
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "config": {
+            "full.path": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "groups"
+          }
         }
       ]
+    }
+  ],
+  "groups": [
+    {
+      "name": "tenant-1"
+    },
+    {
+      "name": "tenant-2"
     }
   ]
 }
