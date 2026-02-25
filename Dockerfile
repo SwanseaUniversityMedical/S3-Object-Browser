@@ -38,7 +38,7 @@ ENV CGO_ENABLED=0
 
 RUN go build -trimpath --tags=kqueue --ldflags "-s -w" -o console ./cmd/console
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.5
+FROM redhat/ubi8-minimal:8.5
 
 EXPOSE 9090
 
