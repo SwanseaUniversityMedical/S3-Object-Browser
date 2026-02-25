@@ -88,7 +88,7 @@ describe("Security: Keycloak Login Component", () => {
   });
 
   test("IDP URL should be stored for logout", () => {
-    const idpUrl = "http://keycloak:8080/realms/object-browser";
+    const idpUrl = "https://keycloak:8080/realms/object-browser";
     sessionStorage.setItem("oauth_idp_url", idpUrl);
 
     expect(sessionStorage.getItem("oauth_idp_url")).toBe(idpUrl);
