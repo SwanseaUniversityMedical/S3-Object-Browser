@@ -521,10 +521,8 @@ const ListObjects = () => {
 
             if (prefixPath !== "") {
               uploadUrl = `${uploadUrl}?prefix=${encodeURIComponent(
-                prefixPath + fileName,
+                prefixPath,
               )}`;
-            } else {
-              uploadUrl = `${uploadUrl}?prefix=${encodeURIComponent(fileName)}`;
             }
 
             const identity = encodeURIComponent(
