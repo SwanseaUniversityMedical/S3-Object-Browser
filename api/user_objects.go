@@ -17,6 +17,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -990,6 +991,7 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 	// Track upload statistics for bulk operations
 	totalFiles := 0
 	successfulFiles := 0
+	var uploadErrors []string
 
 	for {
 		p, err := mr.NextPart()
@@ -997,29 +999,67 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 			break
 		}
 		if err != nil {
-			return err
+			uploadErrors = append(uploadErrors, fmt.Sprintf("Error reading multipart form: %v", err))
+			continue
 		}
 
 		totalFiles++
 
-		size, err := strconv.ParseInt(p.FormName(), 10, 64)
+		// Get the filename from the multipart part
+		fileName := p.FileName()
+		if fileName == "" {
+			// Fallback to form name if filename not available
+			fileName = p.FormName()
+		}
+
+		// Read the file data to determine its size
+		fileData, err := io.ReadAll(p)
 		if err != nil {
-			return err
+			errorMsg := fmt.Sprintf("Error reading file %s: %v", fileName, err)
+			uploadErrors = append(uploadErrors, errorMsg)
+			fmt.Printf("%s\n", errorMsg)
+			continue
+		}
+
+		size := int64(len(fileData))
+
+		// Construct the full object name: prefix + filename
+		objectName := prefix
+		if fileName != "" {
+			// Ensure prefix doesn't end with / if it's not empty
+			if objectName != "" && !strings.HasSuffix(objectName, "/") {
+				objectName = objectName + "/"
+			}
+			objectName = objectName + fileName
+		}
+
+		// Remove leading slashes for S3 object paths
+		objectName = strings.TrimPrefix(objectName, "/")
+
+		if objectName == "" {
+			errorMsg := fmt.Sprintf("Empty object name for file: %s", fileName)
+			uploadErrors = append(uploadErrors, errorMsg)
+			fmt.Printf("%s\n", errorMsg)
+			continue
 		}
 
 		contentType := p.Header.Get("content-type")
 		if contentType == "" {
-			contentType = mimedb.TypeByExtension(filepath.Ext(p.FileName()))
+			contentType = mimedb.TypeByExtension(filepath.Ext(fileName))
 		}
+
 		disableMultipart := size < multipartUploadMinSize
-		objectName := prefix // prefix will have complete object path e.g: /test-prefix/test-object.txt
-		_, err = client.putObject(ctx, params.BucketName, objectName, p, size, PutObjectOptions{
+
+		// Upload the file with the full object path
+		_, err = client.putObject(ctx, params.BucketName, objectName, bytes.NewReader(fileData), size, PutObjectOptions{
 			ContentType:      contentType,
 			DisableMultipart: disableMultipart,
 		})
 		if err != nil {
 			// Log error but continue with other files in bulk upload
-			fmt.Printf("Error uploading %s: %v\n", objectName, err)
+			errorMsg := fmt.Sprintf("Error uploading %s: %v", objectName, err)
+			uploadErrors = append(uploadErrors, errorMsg)
+			fmt.Printf("%s\n", errorMsg)
 			continue
 		}
 		successfulFiles++
@@ -1028,10 +1068,16 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 	// Log bulk upload summary
 	if totalFiles > 1 {
 		fmt.Printf("Bulk upload completed: %d/%d files uploaded successfully\n", successfulFiles, totalFiles)
+		if len(uploadErrors) > 0 {
+			fmt.Printf("Upload errors:\n")
+			for _, errMsg := range uploadErrors {
+				fmt.Printf("  - %s\n", errMsg)
+			}
+		}
 	}
 
 	if successfulFiles == 0 && totalFiles > 0 {
-		return fmt.Errorf("all %d file uploads failed", totalFiles)
+		return fmt.Errorf("all %d file uploads failed: %v", totalFiles, uploadErrors)
 	}
 
 	return nil
