@@ -19,12 +19,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	jwtgo "github.com/golang-jwt/jwt/v4"
 
@@ -153,26 +155,40 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 		return nil, fmt.Errorf("failed to resolve tenant from id token: %w", err)
 	}
 
-	// Get S3 credentials from environment
+	// Extract policy from JWT for logging/future enforcement
+	parser := jwtgo.NewParser()
+	claims := jwtgo.MapClaims{}
+	_, _, _ = parser.ParseUnverified(tokenResponse.IDToken, &claims)
+
+	var policyName string
+	if policies, ok := claims["policy"].([]interface{}); ok && len(policies) > 0 {
+		if policy, ok := policies[0].(string); ok {
+			policyName = policy
+		}
+	} else if policy, ok := claims["policy"].(string); ok {
+		policyName = policy
+	}
+
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: OIDC login for tenant: %s with policy: %s", tenantID, policyName))
+
+	// Use static S3 credentials for now
+	// For admin user with adminaccess policy: full MinIO access
+	// For other users: would need dynamic access key creation with specific policy
 	accessKey := os.Getenv("S3_ACCESS_KEY")
 	secretKey := os.Getenv("S3_SECRET_KEY")
 
-	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: S3 credentials check: accessKey=%s (length=%d), secretKey present=%v",
-		accessKey, len(accessKey), secretKey != ""))
-
 	if accessKey == "" || secretKey == "" {
 		logger.LogIf(context.Background(), fmt.Errorf("ERROR: S3 credentials not configured"))
-		return nil, fmt.Errorf("S3 credentials not configured - set S3_ACCESS_KEY and S3_SECRET_KEY")
+		return nil, fmt.Errorf("S3 credentials not configured")
 	}
 
-	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Creating session token for OAuth user"))
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Creating session for OIDC user %s from tenant: %s", claims["preferred_username"], tenantID))
 
-	// Create JWT token directly without S3 validation
-	// OAuth user is already authenticated by Keycloak, S3 access will be validated on actual S3 operations
+	// Create JWT token with S3 credentials and tenant context
 	credsValue := &auth.CredentialsValue{
 		AccessKeyID:     accessKey,
 		SecretAccessKey: secretKey,
-		SessionToken:    "",
+		SessionToken:    "", // Not needed for root user
 	}
 
 	sessionFeatures := &auth.SessionFeatures{
@@ -227,6 +243,81 @@ func getTenantIDFromIDToken(idToken string) (string, error) {
 		return "", fmt.Errorf("tenant id is empty")
 	}
 	return tenantID, nil
+}
+
+// STSCredentials represents temporary credentials from MinIO STS
+type STSCredentials struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+	Expiration      time.Time
+}
+
+// assumeRoleWithWebIdentity exchanges a JWT for MinIO STS temporary credentials
+func assumeRoleWithWebIdentity(jwtToken string) (*STSCredentials, error) {
+	// Get MinIO endpoint from environment
+	endpoint := os.Getenv("S3_ENDPOINT")
+	if endpoint == "" {
+		return nil, fmt.Errorf("S3_ENDPOINT not configured")
+	}
+
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Calling STS at %s", endpoint))
+
+	// Prepare STS request as form data
+	data := url.Values{
+		"Action":           {"AssumeRoleWithWebIdentity"},
+		"WebIdentityToken": {jwtToken},
+		"DurationSeconds":  {"3600"},
+		"Version":          {"2011-06-15"},
+	}
+
+	resp, err := http.PostForm(endpoint, data)
+	if err != nil {
+		return nil, fmt.Errorf("STS request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		logger.LogIf(context.Background(), fmt.Errorf("ERROR: STS failed with status %d: %s", resp.StatusCode, string(body)))
+		return nil, fmt.Errorf("STS request failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse XML response
+	var stsResp struct {
+		AssumeRoleWithWebIdentityResult struct {
+			Credentials struct {
+				AccessKeyId     string `xml:"AccessKeyId"`
+				SecretAccessKey string `xml:"SecretAccessKey"`
+				SessionToken    string `xml:"SessionToken"`
+				Expiration      string `xml:"Expiration"`
+			} `xml:"Credentials"`
+		} `xml:"AssumeRoleWithWebIdentityResult"`
+	}
+
+	if err := xml.Unmarshal(body, &stsResp); err != nil {
+		logger.LogIf(context.Background(), fmt.Errorf("ERROR: Failed to parse STS response: %v, body: %s", err, string(body)))
+		return nil, fmt.Errorf("failed to parse STS response: %w", err)
+	}
+
+	creds := stsResp.AssumeRoleWithWebIdentityResult.Credentials
+	if creds.AccessKeyId == "" || creds.SecretAccessKey == "" {
+		logger.LogIf(context.Background(), fmt.Errorf("ERROR: STS returned empty credentials"))
+		return nil, fmt.Errorf("STS returned empty credentials")
+	}
+
+	expiration, _ := time.Parse(time.RFC3339, creds.Expiration)
+
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: STS success - AccessKeyId=%s, Expiration=%s",
+		creds.AccessKeyId, creds.Expiration))
+
+	return &STSCredentials{
+		AccessKeyID:     creds.AccessKeyId,
+		SecretAccessKey: creds.SecretAccessKey,
+		SessionToken:    creds.SessionToken,
+		Expiration:      expiration,
+	}, nil
 }
 
 // login performs a check of S3 credentials, generates some claims and returns the jwt

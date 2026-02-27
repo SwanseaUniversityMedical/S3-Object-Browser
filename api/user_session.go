@@ -68,9 +68,13 @@ func getSessionResponse(ctx context.Context, session *models.Principal) (*models
 	// All users get full S3 permissions by default
 	customStyles := session.CustomStyleOb
 
-	// Grant all S3 actions - in pure S3 mode, permissions are managed by AWS IAM
+	// Grant all S3 actions in S3 ARN format for frontend permission checks
+	// Frontend expects permissions keyed by S3 ARN (e.g., "arn:aws:s3:::*" for all buckets)
 	resourcePermissions := map[string][]string{
-		ConsoleResourceName: {"s3:*"},
+		// Wildcard for all buckets - administrator access
+		"arn:aws:s3:::*": {
+			"s3:*",
+		},
 	}
 
 	var allowResources []*models.PermissionResource

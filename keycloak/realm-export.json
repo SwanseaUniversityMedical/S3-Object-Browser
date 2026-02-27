@@ -20,6 +20,9 @@
       "groups": [
         "/tenant-1"
       ],
+      "attributes": {
+        "policy": ["readwrite"]
+      },
       "credentials": [
         {
           "type": "password",
@@ -35,8 +38,11 @@
       "firstName": "Admin",
       "lastName": "User",
       "groups": [
-        "/tenant-2"
+        "/default"
       ],
+      "attributes": {
+        "policy": ["adminaccess"]
+      },
       "credentials": [
         {
           "type": "password",
@@ -97,9 +103,9 @@
         {
           "name": "policy",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
           "config": {
-            "claim.value": "readwrite",
+            "user.attribute": "policy",
             "userinfo.token.claim": "true",
             "id.token.claim": "true",
             "access.token.claim": "true",
@@ -123,6 +129,9 @@
     }
   ],
   "groups": [
+    {
+      "name": "default"
+    },
     {
       "name": "tenant-1"
     },

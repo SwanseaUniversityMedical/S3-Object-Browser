@@ -27,6 +27,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	xnet "github.com/minio/pkg/v3/net"
@@ -65,6 +66,8 @@ type S3Client interface {
 	GetBucketTagging(ctx context.Context, bucketName string) (map[string]string, error)
 	SetBucketTagging(ctx context.Context, bucketName string, tags map[string]string) error
 	RemoveBucketTagging(ctx context.Context, bucketName string) error
+	uploadDirectory(ctx context.Context, bucketName, prefix, sourcePath string, recursive bool) (*DirectoryUploadResult, error)
+	downloadDirectory(ctx context.Context, bucketName, prefix, destPath string) (*DirectoryDownloadResult, error)
 }
 
 // Simple wrapper types for AWS SDK compatibility
@@ -112,6 +115,8 @@ type PutObjectOptions struct {
 	DisableMultipart bool
 }
 
+const multipartUploadMinSize int64 = 64 * 1024 * 1024
+
 type PutObjectRetentionOptions struct {
 	Mode            *string
 	RetainUntilDate *time.Time
@@ -153,6 +158,20 @@ type EncryptionRule struct {
 type EncryptionByDefault struct {
 	SSEAlgorithm   string
 	KMSMasterKeyID string
+}
+
+type DirectoryUploadResult struct {
+	TotalFiles      int
+	SuccessfulFiles int
+	FailedFiles     int
+	TotalBytes      int64
+}
+
+type DirectoryDownloadResult struct {
+	TotalObjects      int
+	SuccessfulObjects int
+	FailedObjects     int
+	TotalBytes        int64
 }
 
 // Interface implementation
@@ -339,18 +358,38 @@ func (c s3Client) getObjectRetention(ctx context.Context, bucketName, objectName
 }
 
 func (c s3Client) putObject(ctx context.Context, bucketName, objectName string, reader io.Reader, objectSize int64, opts PutObjectOptions) (info UploadInfo, err error) {
-	input := &s3.PutObjectInput{
-		Bucket: aws.String(bucketName),
-		Key:    aws.String(objectName),
-		Body:   reader,
+	if !opts.DisableMultipart && objectSize >= multipartUploadMinSize {
+		// Use transfer manager for large files
+		tmClient := transfermanager.New(c.client, func(o *transfermanager.Options) {
+			o.PartSizeBytes = multipartUploadMinSize
+		})
+		input := &transfermanager.UploadObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(objectName),
+			Body:   reader,
+		}
+		if opts.ContentType != "" {
+			input.ContentType = aws.String(opts.ContentType)
+		}
+		if opts.UserMetadata != nil {
+			input.Metadata = opts.UserMetadata
+		}
+		_, err = tmClient.UploadObject(ctx, input)
+	} else {
+		// Use regular PutObject for small files
+		input := &s3.PutObjectInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(objectName),
+			Body:   reader,
+		}
+		if opts.ContentType != "" {
+			input.ContentType = aws.String(opts.ContentType)
+		}
+		if opts.UserMetadata != nil {
+			input.Metadata = opts.UserMetadata
+		}
+		_, err = c.client.PutObject(ctx, input)
 	}
-	if opts.ContentType != "" {
-		input.ContentType = aws.String(opts.ContentType)
-	}
-	if opts.UserMetadata != nil {
-		input.Metadata = opts.UserMetadata
-	}
-	_, err = c.client.PutObject(ctx, input)
 	if err != nil {
 		return UploadInfo{}, err
 	}
@@ -586,6 +625,64 @@ func (c s3Client) copyObject(ctx context.Context, dst CopyDestOptions, src CopyS
 		Key:  dst.Object,
 		Size: 0, // AWS SDK doesn't return size directly
 	}, nil
+}
+
+func (c s3Client) uploadDirectory(ctx context.Context, bucketName, prefix, sourcePath string, recursive bool) (*DirectoryUploadResult, error) {
+	tmClient := transfermanager.New(c.client, func(o *transfermanager.Options) {
+		o.PartSizeBytes = multipartUploadMinSize
+		o.Concurrency = 10
+	})
+
+	result := &DirectoryUploadResult{}
+
+	input := &transfermanager.UploadDirectoryInput{
+		Bucket:    aws.String(bucketName),
+		Source:    aws.String(sourcePath),
+		Recursive: aws.Bool(recursive),
+	}
+
+	if prefix != "" {
+		input.KeyPrefix = aws.String(prefix)
+	}
+
+	output, err := tmClient.UploadDirectory(ctx, input)
+	if err != nil {
+		return result, err
+	}
+
+	result.SuccessfulFiles = int(output.ObjectsUploaded)
+	result.FailedFiles = int(output.ObjectsFailed)
+	result.TotalFiles = int(output.ObjectsUploaded + output.ObjectsFailed)
+
+	return result, nil
+}
+
+func (c s3Client) downloadDirectory(ctx context.Context, bucketName, prefix, destPath string) (*DirectoryDownloadResult, error) {
+	tmClient := transfermanager.New(c.client, func(o *transfermanager.Options) {
+		o.Concurrency = 10
+	})
+
+	result := &DirectoryDownloadResult{}
+
+	input := &transfermanager.DownloadDirectoryInput{
+		Bucket:      aws.String(bucketName),
+		Destination: aws.String(destPath),
+	}
+
+	if prefix != "" {
+		input.KeyPrefix = aws.String(prefix)
+	}
+
+	output, err := tmClient.DownloadDirectory(ctx, input)
+	if err != nil {
+		return result, err
+	}
+
+	result.SuccessfulObjects = int(output.ObjectsDownloaded)
+	result.FailedObjects = int(output.ObjectsFailed)
+	result.TotalObjects = int(output.ObjectsDownloaded + output.ObjectsFailed)
+
+	return result, nil
 }
 
 // MCClient interface with all functions to be implemented

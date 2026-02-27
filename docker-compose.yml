@@ -91,6 +91,9 @@ services:
       MINIO_IDENTITY_OIDC_REDIRECT_URI: "http://localhost:9090/oauth_callback"
       MINIO_IDENTITY_OIDC_DISPLAY_NAME: "Keycloak"
       MINIO_IDENTITY_OIDC_SCOPES: "openid,profile,email"
+      MINIO_IDENTITY_OIDC_CLAIM_NAME: "policy"
+      MINIO_IDENTITY_OIDC_CLAIM_PREFIX: ""
+      MINIO_IDENTITY_OIDC_ROLE_POLICY: "enabled"
     volumes:
       - s3_primary_data:/data
     ports:

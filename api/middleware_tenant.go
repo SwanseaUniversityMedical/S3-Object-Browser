@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
@@ -36,49 +37,59 @@ func TenantIsolationMiddleware(next http.Handler) http.Handler {
 
 		// Extract session token
 		sessionToken := extractSessionTokenFromRequest(r)
+		var tenantID tenants.TenantID
+		var claims *auth.TokenClaims
+
 		if sessionToken == "" {
-			// Anonymous/unauthenticated requests bypass tenant check
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		// Decode session token to extract tenant ID
-		claims, err := auth.ParseClaimsFromToken(sessionToken)
-		if err != nil {
-			logger.LogIf(ctx, fmt.Errorf("tenant middleware: failed to parse session token: %w", err))
-			http.Error(w, "Invalid session", http.StatusUnauthorized)
-			return
-		}
-
-		if claims == nil {
-			logger.LogIf(ctx, fmt.Errorf("tenant middleware: no claims in session token"))
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		// Extract tenant ID from token (if present)
-		tenantID := tenants.TenantID(claims.TenantID)
-		if !tenantID.IsValid() {
-			// Default tenant if not specified
-			tenantID = "default"
-		}
-
-		// Check if client is trying to override tenant via query parameter
-		// This is a security check to prevent tampering
-		if queryTenant := r.URL.Query().Get("tenant"); queryTenant != "" {
-			if queryTenant != tenantID.String() {
-				logger.LogIf(ctx, fmt.Errorf("tenant middleware: tenant tampering attempt - session: %s, requested: %s",
-					tenantID.String(), queryTenant))
-				http.Error(w, "Forbidden: tenant context mismatch", http.StatusForbidden)
+			// Anonymous/unauthenticated requests use default tenant from environment
+			defaultTenant := os.Getenv("CONSOLE_TENANT_ID")
+			if defaultTenant == "" {
+				defaultTenant = "default"
+			}
+			tenantID = tenants.TenantID(defaultTenant)
+			logger.LogIf(ctx, fmt.Errorf("tenant middleware: unauthenticated request routed to default tenant %s", tenantID.String()))
+		} else {
+			// Decode session token to extract tenant ID
+			var err error
+			claims, err = auth.ParseClaimsFromToken(sessionToken)
+			if err != nil {
+				logger.LogIf(ctx, fmt.Errorf("tenant middleware: failed to parse session token: %w", err))
+				http.Error(w, "Invalid session", http.StatusUnauthorized)
 				return
 			}
+
+			if claims == nil {
+				logger.LogIf(ctx, fmt.Errorf("tenant middleware: no claims in session token"))
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			// Extract tenant ID from token (if present)
+			tenantID = tenants.TenantID(claims.TenantID)
+			if !tenantID.IsValid() {
+				// Default tenant if not specified
+				tenantID = "default"
+			}
+
+			// Check if client is trying to override tenant via query parameter
+			// This is a security check to prevent tampering
+			if queryTenant := r.URL.Query().Get("tenant"); queryTenant != "" {
+				if queryTenant != tenantID.String() {
+					logger.LogIf(ctx, fmt.Errorf("tenant middleware: tenant tampering attempt - session: %s, requested: %s",
+						tenantID.String(), queryTenant))
+					http.Error(w, "Forbidden: tenant context mismatch", http.StatusForbidden)
+					return
+				}
+			}
+
+			logger.LogIf(ctx, fmt.Errorf("tenant middleware: authenticated request routed to tenant %s", tenantID.String()))
 		}
 
 		// Store tenant ID in context for use by handlers
 		ctx = tenants.SetTenantInContext(ctx, tenantID)
-		ctx = context.WithValue(ctx, "session_claims", claims)
-
-		logger.LogIf(ctx, fmt.Errorf("tenant middleware: request routed to tenant %s", tenantID.String()))
+		if claims != nil {
+			ctx = context.WithValue(ctx, "session_claims", claims)
+		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

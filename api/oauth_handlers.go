@@ -120,15 +120,12 @@ func OAuthCallbackHandler(w http.ResponseWriter, r *http.Request) {
 		cookie.Name, cookie.Path, cookie.HttpOnly, cookie.SameSite, cookie.Secure)
 	http.SetCookie(w, &cookie)
 
-	// Return success response
-	response := OAuthCallbackResponse{
-		SessionID: loginResponse.SessionID,
-		Success:   true,
-	}
-
-	fmt.Printf("DEBUG: Sending success response\n")
-
+	// Return success response with JSON body for frontend to parse
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": "Authentication successful",
+	})
+	fmt.Printf("DEBUG: Sent 200 OK response with JSON and cookie\n")
 }

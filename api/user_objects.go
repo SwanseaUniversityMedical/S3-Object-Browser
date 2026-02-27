@@ -987,11 +987,20 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 		return err
 	}
 
+	// Track upload statistics for bulk operations
+	totalFiles := 0
+	successfulFiles := 0
+
 	for {
 		p, err := mr.NextPart()
 		if err == io.EOF {
 			break
 		}
+		if err != nil {
+			return err
+		}
+
+		totalFiles++
 
 		size, err := strconv.ParseInt(p.FormName(), 10, 64)
 		if err != nil {
@@ -1002,14 +1011,27 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 		if contentType == "" {
 			contentType = mimedb.TypeByExtension(filepath.Ext(p.FileName()))
 		}
+		disableMultipart := size < multipartUploadMinSize
 		objectName := prefix // prefix will have complete object path e.g: /test-prefix/test-object.txt
 		_, err = client.putObject(ctx, params.BucketName, objectName, p, size, PutObjectOptions{
 			ContentType:      contentType,
-			DisableMultipart: true, // Do not upload as multipart stream for console uploader.
+			DisableMultipart: disableMultipart,
 		})
 		if err != nil {
-			return err
+			// Log error but continue with other files in bulk upload
+			fmt.Printf("Error uploading %s: %v\n", objectName, err)
+			continue
 		}
+		successfulFiles++
+	}
+
+	// Log bulk upload summary
+	if totalFiles > 1 {
+		fmt.Printf("Bulk upload completed: %d/%d files uploaded successfully\n", successfulFiles, totalFiles)
+	}
+
+	if successfulFiles == 0 && totalFiles > 0 {
+		return fmt.Errorf("all %d file uploads failed", totalFiles)
 	}
 
 	return nil
