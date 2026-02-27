@@ -299,6 +299,7 @@ func (c s3Client) listObjects(ctx context.Context, bucket string, opts ListObjec
 					Size:         aws.ToInt64(obj.Size),
 					LastModified: aws.ToTime(obj.LastModified),
 					ContentType:  "",
+					ETag:         aws.ToString(obj.ETag),
 				}
 			}
 		}

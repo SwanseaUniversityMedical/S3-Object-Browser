@@ -33,6 +33,7 @@ import (
 
 	"github.com/aws/smithy-go"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
@@ -1155,6 +1156,24 @@ func getPutObjectTagsResponse(session *models.Principal, params objectApi.PutObj
 	if err != nil {
 		return ErrorWithContext(ctx, err)
 	}
+
+	// Add audit information
+	auditEntry := logger.GetAuditEntry(ctx)
+	if auditEntry != nil {
+		if auditEntry.Tags == nil {
+			auditEntry.Tags = make(map[string]interface{})
+		}
+		auditEntry.Tags["action"] = "put_object_tags"
+		auditEntry.Tags["bucket"] = params.BucketName
+		auditEntry.Tags["object"] = params.Prefix
+		auditEntry.Tags["version_id"] = params.VersionID
+		auditEntry.Tags["user"] = session.AccountAccessKey
+		auditEntry.Tags["tag_count"] = len(params.Body.Tags)
+	}
+
+	LogInfo(fmt.Sprintf("User %s updating tags on object %s in bucket %s (version: %s) with %d tags",
+		session.AccountAccessKey, params.Prefix, params.BucketName, params.VersionID, len(params.Body.Tags)))
+
 	err = putObjectTags(ctx, client, params.BucketName, params.Prefix, params.VersionID, params.Body.Tags)
 	if err != nil {
 		return ErrorWithContext(ctx, err)
