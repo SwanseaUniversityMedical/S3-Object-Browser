@@ -1157,35 +1157,31 @@ func getPutObjectTagsResponse(session *models.Principal, params objectApi.PutObj
 		return ErrorWithContext(ctx, err)
 	}
 
-	// Add audit information
-	auditEntry := logger.GetAuditEntry(ctx)
-	if auditEntry != nil {
-		if auditEntry.Tags == nil {
-			auditEntry.Tags = make(map[string]interface{})
-		}
-		auditEntry.Tags["action"] = "put_object_tags"
-		auditEntry.Tags["bucket"] = params.BucketName
-		auditEntry.Tags["object"] = params.Prefix
-		auditEntry.Tags["version_id"] = params.VersionID
-		auditEntry.Tags["user"] = session.AccountAccessKey
-		auditEntry.Tags["tag_count"] = len(params.Body.Tags)
+	// Create and set audit context
+	auditCtx := logger.NewAuditContext().
+		WithUser(session.AccountAccessKey, session.STSSessionToken).
+		WithTenant(session.TenantID).
+		WithResource(params.BucketName, params.Prefix, params.VersionID).
+		WithAction("put_object_tags")
+	ctx = logger.SetAuditContext(ctx, auditCtx)
+
+	LogInfo(fmt.Sprintf("User %s updating %d tags on object %s in bucket %s (version: %s)",
+		session.AccountAccessKey, len(params.Body.Tags), params.Prefix, params.BucketName, params.VersionID))
+
+	opts := PutObjectTaggingOptions{
+		VersionID: params.VersionID,
 	}
-
-	LogInfo(fmt.Sprintf("User %s updating tags on object %s in bucket %s (version: %s) with %d tags",
-		session.AccountAccessKey, params.Prefix, params.BucketName, params.VersionID, len(params.Body.Tags)))
-
-	err = putObjectTags(ctx, client, params.BucketName, params.Prefix, params.VersionID, params.Body.Tags)
+	err = client.putObjectTagging(ctx, params.BucketName, params.Prefix, params.Body.Tags, opts)
 	if err != nil {
+		auditCtx.WithError(err.Error())
+		ctx = logger.SetAuditContext(ctx, auditCtx)
 		return ErrorWithContext(ctx, err)
 	}
-	return nil
-}
 
-func putObjectTags(ctx context.Context, client S3Client, bucketName, prefix, versionID string, tagMap map[string]string) error {
-	opt := PutObjectTaggingOptions{
-		VersionID: versionID,
-	}
-	return client.putObjectTagging(ctx, bucketName, prefix, tagMap, opt)
+	// Mark audit success
+	auditCtx.Success = true
+	ctx = logger.SetAuditContext(ctx, auditCtx)
+	return nil
 }
 
 // Restore Object Version

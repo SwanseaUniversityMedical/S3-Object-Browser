@@ -191,6 +191,18 @@ func AuditLog(ctx context.Context, w *ResponseWriter, r *http.Request, reqClaims
 			delete(entry.RespHeader, filterKey)
 		}
 
+		// Initialize tags if nil
+		if entry.Tags == nil {
+			entry.Tags = make(map[string]interface{})
+		}
+
+		// Add audit context to entry tags
+		if auditCtx := GetAuditContext(ctx); auditCtx != nil {
+			for k, v := range auditCtx.ToMap() {
+				entry.Tags[k] = v
+			}
+		}
+
 		var (
 			statusCode      int
 			timeToResponse  time.Duration
