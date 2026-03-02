@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -32,14 +32,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth/token"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/token"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+// CredentialsValue represents S3/AWS credentials
+type CredentialsValue struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+}
 
 // Session token errors
 var (
@@ -68,6 +74,7 @@ type TokenClaims struct {
 	HideMenu           bool   `json:"hm,omitempty"`
 	ObjectBrowser      bool   `json:"ob,omitempty"`
 	CustomStyleOB      string `json:"customStyleOb,omitempty"`
+	TenantID           string `json:"tenantId,omitempty"`
 }
 
 // STSClaims claims struct for STS Token
@@ -80,6 +87,7 @@ type SessionFeatures struct {
 	HideMenu      bool
 	ObjectBrowser bool
 	CustomStyleOB string
+	TenantID      string
 }
 
 // SessionTokenAuthenticate takes a session token, decode it, extract claims and validate the signature
@@ -111,9 +119,9 @@ func SessionTokenAuthenticate(token string) (*TokenClaims, error) {
 	return claimTokens, nil
 }
 
-// NewEncryptedTokenForClient generates a new session token with claims based on the provided STS credentials, first
+// NewEncryptedTokenForClient generates a new session token with claims based on the provided S3 credentials, first
 // encrypts the claims and the sign them
-func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey string, features *SessionFeatures) (string, error) {
+func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey string, features *SessionFeatures) (string, error) {
 	if credentials != nil {
 		tokenClaims := &TokenClaims{
 			STSAccessKeyID:     credentials.AccessKeyID,
@@ -125,6 +133,7 @@ func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey
 			tokenClaims.HideMenu = features.HideMenu
 			tokenClaims.ObjectBrowser = features.ObjectBrowser
 			tokenClaims.CustomStyleOB = features.CustomStyleOB
+			tokenClaims.TenantID = features.TenantID
 		}
 
 		encryptedClaims, err := encryptClaims(tokenClaims)
@@ -319,7 +328,8 @@ func GetTokenFromRequest(r *http.Request) (string, error) {
 		return "", ErrNoAuthToken
 	}
 	currentTime := time.Now()
-	if tokenCookie.Expires.After(currentTime) {
+	// Check if cookie has expired (Expires is before current time)
+	if !tokenCookie.Expires.IsZero() && tokenCookie.Expires.Before(currentTime) {
 		return "", ErrTokenExpired
 	}
 	return strings.TrimSpace(tokenCookie.Value), nil

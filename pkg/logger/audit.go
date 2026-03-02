@@ -29,9 +29,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/minio/console/pkg/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
-	"github.com/minio/console/pkg/logger/message/audit"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/message/audit"
 )
 
 // ResponseWriter - is a wrapper to trap the http response status code.
@@ -189,6 +189,18 @@ func AuditLog(ctx context.Context, w *ResponseWriter, r *http.Request, reqClaims
 			delete(entry.ReqQuery, filterKey)
 			delete(entry.ReqHeader, filterKey)
 			delete(entry.RespHeader, filterKey)
+		}
+
+		// Initialize tags if nil
+		if entry.Tags == nil {
+			entry.Tags = make(map[string]interface{})
+		}
+
+		// Add audit context to entry tags
+		if auditCtx := GetAuditContext(ctx); auditCtx != nil {
+			for k, v := range auditCtx.ToMap() {
+				entry.Tags[k] = v
+			}
 		}
 
 		var (

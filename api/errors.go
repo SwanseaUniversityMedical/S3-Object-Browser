@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2022 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -21,9 +21,9 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/minio/minio-go/v7"
+	"github.com/aws/smithy-go"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/minio/madmin-go/v3"
 )
 
@@ -253,9 +253,12 @@ func ErrorWithContext(ctx context.Context, err ...interface{}) *CodedAPIError {
 				errorMessage = err1.Error()
 			}
 			// bucket already exists
-			if minio.ToErrorResponse(err1).Code == "BucketAlreadyOwnedByYou" {
-				errorCode = 400
-				errorMessage = "Bucket already exists"
+			var ae smithy.APIError
+			if errors.As(err1, &ae) {
+				if ae.ErrorCode() == "BucketAlreadyOwnedByYou" || ae.ErrorCode() == "BucketAlreadyExists" {
+					errorCode = 400
+					errorMessage = "Bucket already exists"
+				}
 			}
 
 			LogError("ErrorWithContext:%v", err...)

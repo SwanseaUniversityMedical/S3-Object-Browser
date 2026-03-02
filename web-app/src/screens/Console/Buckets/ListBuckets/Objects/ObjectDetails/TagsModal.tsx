@@ -55,7 +55,7 @@ const DeleteTag = styled.b(({ theme }) => ({
   marginLeft: 5,
 }));
 
-const AddTagModal = ({
+const TagsModal = ({
   modalOpen,
   onCloseAndUpdate,
   bucketName,
@@ -69,6 +69,10 @@ const AddTagModal = ({
   const [deleteEnabled, setDeleteEnabled] = useState<boolean>(false);
   const [deleteKey, setDeleteKey] = useState<string>("");
   const [deleteLabel, setDeleteLabel] = useState<string>("");
+  const [editMode, setEditMode] = useState<boolean>(false);
+  const [editKey, setEditKey] = useState<string>("");
+  const [editValue, setEditValue] = useState<string>("");
+  const [originalKey, setOriginalKey] = useState<string>("");
 
   const currentTags = actualInfo.tags;
   const currTagKeys = Object.keys(currentTags || {});
@@ -134,6 +138,51 @@ const AddTagModal = ({
     setDeleteEnabled(true);
   };
 
+  const onEditTag = (tagKey: string, tag: string) => {
+    setOriginalKey(tagKey);
+    setEditKey(tagKey);
+    setEditValue(tag);
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setEditKey("");
+    setEditValue("");
+    setOriginalKey("");
+    setEditMode(false);
+  };
+
+  const saveEditedTag = () => {
+    setIsSending(true);
+    const updatedTags: any = { ...currentTags };
+    
+    // If key changed, delete old key
+    if (originalKey !== editKey) {
+      delete updatedTags[originalKey];
+    }
+    
+    // Set new/updated key-value pair
+    updatedTags[editKey] = editValue;
+
+    const verID = distributedSetup ? actualInfo.version_id || "" : "null";
+
+    api.buckets
+      .putObjectTags(
+        bucketName,
+        { prefix: actualInfo.name || "", version_id: verID },
+        { tags: updatedTags },
+      )
+      .then(() => {
+        cancelEdit();
+        onCloseAndUpdate(true);
+        setIsSending(false);
+      })
+      .catch((err) => {
+        dispatch(setModalErrorSnackMessage(errorToHandler(err.error)));
+        setIsSending(false);
+      });
+  };
+
   const cancelDelete = () => {
     setDeleteKey("");
     setDeleteLabel("");
@@ -155,174 +204,248 @@ const AddTagModal = ({
     </Box>
   );
 
+  const getModalTitle = () => {
+    if (deleteEnabled) return "Delete Tag";
+    if (editMode) return "Edit Tag";
+    return "Edit Tags";
+  };
+
+  const renderDeleteMode = () => (
+    <Grid container>
+      {tagsFor(false)}
+      Are you sure you want to delete the tag{" "}
+      <DeleteTag>
+        {deleteKey} : {deleteLabel}
+      </DeleteTag>{" "}
+      ?
+      <Grid item xs={12} sx={modalStyleUtils.modalButtonBar}>
+        <Button
+          id={"cancel"}
+          type="button"
+          variant="regular"
+          onClick={cancelDelete}
+          label={"Cancel"}
+        />
+        <Button
+          type="submit"
+          variant="secondary"
+          onClick={deleteTagProcess}
+          id={"deleteTag"}
+          label={"Delete Tag"}
+        />
+      </Grid>
+    </Grid>
+  );
+
+  const renderEditMode = () => (
+    <Grid container>
+      {tagsFor(false)}
+      <Box sx={{ width: "100%", marginTop: 2 }}>
+        <FormLayout containerPadding={false} withBorders={false}>
+          <InputBox
+            value={editKey}
+            label={"Tag Key"}
+            id={"editTagKey"}
+            name={"editTagKey"}
+            placeholder={"Enter Tag Key"}
+            onChange={(e) => {
+              setEditKey(e.target.value);
+            }}
+          />
+          <InputBox
+            value={editValue}
+            label={"Tag Value"}
+            id={"editTagValue"}
+            name={"editTagValue"}
+            placeholder={"Enter Tag Value"}
+            onChange={(e) => {
+              setEditValue(e.target.value);
+            }}
+          />
+        </FormLayout>
+      </Box>
+      <Grid item xs={12} sx={modalStyleUtils.modalButtonBar}>
+        <Button
+          id={"cancelEdit"}
+          type="button"
+          variant="regular"
+          onClick={cancelEdit}
+          label={"Cancel"}
+        />
+        <Button
+          type="submit"
+          variant="callAction"
+          disabled={
+            editKey.trim() === "" ||
+            editValue.trim() === "" ||
+            isSending
+          }
+          onClick={saveEditedTag}
+          id={"saveEditedTag"}
+          label={"Save"}
+        />
+      </Grid>
+    </Grid>
+  );
+
+  const renderContent = () => {
+    if (deleteEnabled) return renderDeleteMode();
+    if (editMode) return renderEditMode();
+    return renderMainView();
+  };
+
+  const renderMainView = () => (
+    <Box>
+      <SecureComponent
+        scopes={[
+          IAM_SCOPES.S3_GET_OBJECT_TAGGING,
+          IAM_SCOPES.S3_GET_ACTIONS,
+        ]}
+        resource={bucketName}
+      >
+        <Box
+          sx={{
+            display: "flex",
+            flexFlow: "column",
+            width: "100%",
+          }}
+        >
+          {tagsFor(true)}
+          <Box
+            sx={{
+              fontSize: 14,
+              fontWeight: "normal",
+            }}
+          >
+            Current Tags:
+            <br />
+            {currTagKeys.length === 0 ? (
+              <span className={"muted"}>
+                There are no tags for this object
+              </span>
+            ) : (
+              <Fragment />
+            )}
+            <Box sx={{ marginTop: "5px", marginBottom: "15px" }}>
+              {currTagKeys.map((tagKey: string, index: number) => {
+                const tag = get(currentTags, `${tagKey}`, "");
+                if (tag !== "") {
+                  return (
+                    <SecureComponent
+                      key={`chip-${index}`}
+                      scopes={[
+                        IAM_SCOPES.S3_DELETE_OBJECT_TAGGING,
+                        IAM_SCOPES.S3_DELETE_ACTIONS,
+                      ]}
+                      resource={bucketName}
+                      errorProps={{
+                        deleteIcon: null,
+                        onDelete: null,
+                      }}
+                    >
+                      <Tag
+                        id={`${tagKey} : ${tag}`}
+                        label={`${tagKey} : ${tag}`}
+                        variant={"regular"}
+                        color={"default"}
+                        onDelete={() => {
+                          onDeleteTag(tagKey, tag);
+                        }}
+                        onClick={() => {
+                          onEditTag(tagKey, tag);
+                        }}
+                        sx={{
+                          cursor: "pointer",
+                          "&:hover": {
+                            opacity: 0.8,
+                          },
+                        }}
+                      />
+                    </SecureComponent>
+                  );
+                }
+                return null;
+              })}
+            </Box>
+          </Box>
+        </Box>
+      </SecureComponent>
+      <SecureComponent
+        scopes={[
+          IAM_SCOPES.S3_PUT_OBJECT_TAGGING,
+          IAM_SCOPES.S3_PUT_ACTIONS,
+        ]}
+        resource={bucketName}
+        errorProps={{ disabled: true, onClick: null }}
+      >
+        <Box>
+          <SectionTitle icon={<AddNewTagIcon />} separator={false}>
+            Add New Tag
+          </SectionTitle>
+          <FormLayout containerPadding={false} withBorders={false}>
+            <InputBox
+              value={newKey}
+              label={"Tag Key"}
+              id={"newTagKey"}
+              name={"newTagKey"}
+              placeholder={"Enter Tag Key"}
+              onChange={(e) => {
+                setNewKey(e.target.value);
+              }}
+            />
+            <InputBox
+              value={newLabel}
+              label={"Tag Label"}
+              id={"newTagLabel"}
+              name={"newTagLabel"}
+              placeholder={"Enter Tag Label"}
+              onChange={(e) => {
+                setNewLabel(e.target.value);
+              }}
+            />
+            <Grid item xs={12} sx={modalStyleUtils.modalButtonBar}>
+              <Button
+                id={"clear"}
+                type="button"
+                variant="regular"
+                color="primary"
+                onClick={resetForm}
+                label={"Clear"}
+              />
+              <Button
+                type="submit"
+                variant="callAction"
+                disabled={
+                  newLabel.trim() === "" ||
+                  newKey.trim() === "" ||
+                  isSending
+                }
+                onClick={addTagProcess}
+                id="saveTag"
+                label={"Save"}
+              />
+            </Grid>
+          </FormLayout>
+        </Box>
+      </SecureComponent>
+    </Box>
+  );
+
   return (
     <Fragment>
       <ModalWrapper
         modalOpen={modalOpen}
-        title={deleteEnabled ? "Delete Tag" : `Edit Tags`}
+        title={getModalTitle()}
         onClose={() => {
           onCloseAndUpdate(true);
         }}
         iconColor={deleteEnabled ? "delete" : "default"}
         titleIcon={deleteEnabled ? <DisabledIcon /> : <EditTagIcon />}
       >
-        {deleteEnabled ? (
-          <Fragment>
-            <Grid container>
-              {tagsFor(false)}
-              Are you sure you want to delete the tag{" "}
-              <DeleteTag>
-                {deleteKey} : {deleteLabel}
-              </DeleteTag>{" "}
-              ?
-              <Grid item xs={12} sx={modalStyleUtils.modalButtonBar}>
-                <Button
-                  id={"cancel"}
-                  type="button"
-                  variant="regular"
-                  onClick={cancelDelete}
-                  label={"Cancel"}
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  onClick={deleteTagProcess}
-                  id={"deleteTag"}
-                  label={"Delete Tag"}
-                />
-              </Grid>
-            </Grid>
-          </Fragment>
-        ) : (
-          <Box>
-            <SecureComponent
-              scopes={[
-                IAM_SCOPES.S3_GET_OBJECT_TAGGING,
-                IAM_SCOPES.S3_GET_ACTIONS,
-              ]}
-              resource={bucketName}
-            >
-              <Box
-                sx={{
-                  display: "flex",
-                  flexFlow: "column",
-                  width: "100%",
-                }}
-              >
-                {tagsFor(true)}
-                <Box
-                  sx={{
-                    fontSize: 14,
-                    fontWeight: "normal",
-                  }}
-                >
-                  Current Tags:
-                  <br />
-                  {currTagKeys.length === 0 ? (
-                    <span className={"muted"}>
-                      There are no tags for this object
-                    </span>
-                  ) : (
-                    <Fragment />
-                  )}
-                  <Box sx={{ marginTop: "5px", marginBottom: "15px" }}>
-                    {currTagKeys.map((tagKey: string, index: number) => {
-                      const tag = get(currentTags, `${tagKey}`, "");
-                      if (tag !== "") {
-                        return (
-                          <SecureComponent
-                            key={`chip-${index}`}
-                            scopes={[
-                              IAM_SCOPES.S3_DELETE_OBJECT_TAGGING,
-                              IAM_SCOPES.S3_DELETE_ACTIONS,
-                            ]}
-                            resource={bucketName}
-                            errorProps={{
-                              deleteIcon: null,
-                              onDelete: null,
-                            }}
-                          >
-                            <Tag
-                              id={`${tagKey} : ${tag}`}
-                              label={`${tagKey} : ${tag}`}
-                              variant={"regular"}
-                              color={"default"}
-                              onDelete={() => {
-                                onDeleteTag(tagKey, tag);
-                              }}
-                            />
-                          </SecureComponent>
-                        );
-                      }
-                      return null;
-                    })}
-                  </Box>
-                </Box>
-              </Box>
-            </SecureComponent>
-            <SecureComponent
-              scopes={[
-                IAM_SCOPES.S3_PUT_OBJECT_TAGGING,
-                IAM_SCOPES.S3_PUT_ACTIONS,
-              ]}
-              resource={bucketName}
-              errorProps={{ disabled: true, onClick: null }}
-            >
-              <Box>
-                <SectionTitle icon={<AddNewTagIcon />} separator={false}>
-                  Add New Tag
-                </SectionTitle>
-                <FormLayout containerPadding={false} withBorders={false}>
-                  <InputBox
-                    value={newKey}
-                    label={"Tag Key"}
-                    id={"newTagKey"}
-                    name={"newTagKey"}
-                    placeholder={"Enter Tag Key"}
-                    onChange={(e) => {
-                      setNewKey(e.target.value);
-                    }}
-                  />
-                  <InputBox
-                    value={newLabel}
-                    label={"Tag Label"}
-                    id={"newTagLabel"}
-                    name={"newTagLabel"}
-                    placeholder={"Enter Tag Label"}
-                    onChange={(e) => {
-                      setNewLabel(e.target.value);
-                    }}
-                  />
-                  <Grid item xs={12} sx={modalStyleUtils.modalButtonBar}>
-                    <Button
-                      id={"clear"}
-                      type="button"
-                      variant="regular"
-                      color="primary"
-                      onClick={resetForm}
-                      label={"Clear"}
-                    />
-                    <Button
-                      type="submit"
-                      variant="callAction"
-                      disabled={
-                        newLabel.trim() === "" ||
-                        newKey.trim() === "" ||
-                        isSending
-                      }
-                      onClick={addTagProcess}
-                      id="saveTag"
-                      label={"Save"}
-                    />
-                  </Grid>
-                </FormLayout>
-              </Box>
-            </SecureComponent>
-          </Box>
-        )}
+        {renderContent()}
       </ModalWrapper>
     </Fragment>
   );
 };
 
-export default AddTagModal;
+export default TagsModal;

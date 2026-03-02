@@ -28,9 +28,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
 	"github.com/go-openapi/loads"
-	"github.com/minio/console/api"
-	"github.com/minio/console/api/operations"
 )
 
 var token string

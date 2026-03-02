@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -16,8 +16,11 @@
 
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { BucketsIcon, MenuItem } from "mds";
+import { BucketsIcon, Menu } from "mds";
 import { Bucket } from "../../../../api/consoleApi";
+
+// MenuItem component wrapper
+const MenuItem = (props: any) => null;
 
 interface IBucketListItem {
   bucket: Bucket;

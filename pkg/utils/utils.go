@@ -31,6 +31,7 @@ const (
 	ContextRequestHost       = key("request-host")
 	ContextRequestRemoteAddr = key("request-remote-addr")
 	ContextAuditKey          = key("request-audit-entry")
+	ContextAuditContextKey   = key("request-audit-context")
 	ContextClientIP          = key("client-ip")
 )
 

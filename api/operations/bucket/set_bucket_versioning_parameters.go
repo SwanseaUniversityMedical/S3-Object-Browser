@@ -32,7 +32,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/validate"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 )
 
 // NewSetBucketVersioningParams creates a new SetBucketVersioningParams object

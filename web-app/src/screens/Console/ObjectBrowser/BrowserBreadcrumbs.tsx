@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2022 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -39,6 +39,8 @@ import { setSnackBarMessage } from "../../../systemSlice";
 import { AppState, useAppDispatch } from "../../../store";
 import { setVersionsModeEnabled } from "./objectBrowserSlice";
 import { getSessionGrantsWildCard } from "../Buckets/ListBuckets/UploadPermissionUtils";
+
+const CopyToClipboardComponent = CopyToClipboard as any;
 
 const CreatePathModal = withSuspense(
   React.lazy(
@@ -254,7 +256,7 @@ const BrowserBreadcrumbs = ({
           goBackFunction={goBackFunction}
           additionalOptions={
             <Fragment>
-              <CopyToClipboard text={`${bucketName}/${splitPaths.join("/")}`}>
+              <CopyToClipboardComponent text={`${bucketName}/${splitPaths.join("/")}`}>
                 <Button
                   id={"copy-path"}
                   icon={
@@ -279,7 +281,7 @@ const BrowserBreadcrumbs = ({
                     marginRight: 5,
                   }}
                 />
-              </CopyToClipboard>
+              </CopyToClipboardComponent>
               <Box className={"additionalOptions"}>{additionalOptions}</Box>
             </Fragment>
           }
