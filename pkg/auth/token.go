@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -32,14 +32,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth/token"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/token"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/pbkdf2"
 )
+
+// CredentialsValue represents S3/AWS credentials
+type CredentialsValue struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+}
 
 // Session token errors
 var (
@@ -61,13 +67,15 @@ func IsSessionTokenValid(token string) bool {
 
 // TokenClaims claims struct for decrypted credentials
 type TokenClaims struct {
-	STSAccessKeyID     string `json:"stsAccessKeyID,omitempty"`
-	STSSecretAccessKey string `json:"stsSecretAccessKey,omitempty"`
-	STSSessionToken    string `json:"stsSessionToken,omitempty"`
-	AccountAccessKey   string `json:"accountAccessKey,omitempty"`
-	HideMenu           bool   `json:"hm,omitempty"`
-	ObjectBrowser      bool   `json:"ob,omitempty"`
-	CustomStyleOB      string `json:"customStyleOb,omitempty"`
+	STSAccessKeyID     string   `json:"stsAccessKeyID,omitempty"`
+	STSSecretAccessKey string   `json:"stsSecretAccessKey,omitempty"`
+	STSSessionToken    string   `json:"stsSessionToken,omitempty"`
+	AccountAccessKey   string   `json:"accountAccessKey,omitempty"`
+	HideMenu           bool     `json:"hm,omitempty"`
+	ObjectBrowser      bool     `json:"ob,omitempty"`
+	CustomStyleOB      string   `json:"customStyleOb,omitempty"`
+	TenantID           string   `json:"tenantId,omitempty"`
+	AllowedBuckets     []string `json:"buckets,omitempty"`
 }
 
 // STSClaims claims struct for STS Token
@@ -77,9 +85,11 @@ type STSClaims struct {
 
 // SessionFeatures represents features stored in the session
 type SessionFeatures struct {
-	HideMenu      bool
-	ObjectBrowser bool
-	CustomStyleOB string
+	HideMenu       bool
+	ObjectBrowser  bool
+	CustomStyleOB  string
+	TenantID       string
+	AllowedBuckets []string
 }
 
 // SessionTokenAuthenticate takes a session token, decode it, extract claims and validate the signature
@@ -111,9 +121,9 @@ func SessionTokenAuthenticate(token string) (*TokenClaims, error) {
 	return claimTokens, nil
 }
 
-// NewEncryptedTokenForClient generates a new session token with claims based on the provided STS credentials, first
+// NewEncryptedTokenForClient generates a new session token with claims based on the provided S3 credentials, first
 // encrypts the claims and the sign them
-func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey string, features *SessionFeatures) (string, error) {
+func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey string, features *SessionFeatures) (string, error) {
 	if credentials != nil {
 		tokenClaims := &TokenClaims{
 			STSAccessKeyID:     credentials.AccessKeyID,
@@ -125,6 +135,8 @@ func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey
 			tokenClaims.HideMenu = features.HideMenu
 			tokenClaims.ObjectBrowser = features.ObjectBrowser
 			tokenClaims.CustomStyleOB = features.CustomStyleOB
+			tokenClaims.TenantID = features.TenantID
+			tokenClaims.AllowedBuckets = features.AllowedBuckets
 		}
 
 		encryptedClaims, err := encryptClaims(tokenClaims)
@@ -319,7 +331,8 @@ func GetTokenFromRequest(r *http.Request) (string, error) {
 		return "", ErrNoAuthToken
 	}
 	currentTime := time.Now()
-	if tokenCookie.Expires.After(currentTime) {
+	// Check if cookie has expired (Expires is before current time)
+	if !tokenCookie.Expires.IsZero() && tokenCookie.Expires.Before(currentTime) {
 		return "", ErrTokenExpired
 	}
 	return strings.TrimSpace(tokenCookie.Value), nil
@@ -336,10 +349,21 @@ func GetClaimsFromTokenInRequest(req *http.Request) (*models.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Serialize allowed buckets to JSON string for Principal
+	var allowedBucketsJSON string
+	if len(claims.AllowedBuckets) > 0 {
+		bucketData, err := json.Marshal(claims.AllowedBuckets)
+		if err == nil {
+			allowedBucketsJSON = string(bucketData)
+		}
+	}
+
 	return &models.Principal{
 		STSAccessKeyID:     claims.STSAccessKeyID,
 		STSSecretAccessKey: claims.STSSecretAccessKey,
 		STSSessionToken:    claims.STSSessionToken,
 		AccountAccessKey:   claims.AccountAccessKey,
+		AllowedBuckets:     allowedBucketsJSON,
 	}, nil
 }

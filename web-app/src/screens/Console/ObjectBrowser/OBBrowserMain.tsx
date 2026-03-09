@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2025 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -112,7 +112,7 @@ const OBBrowserMain = () => {
                   title={"Buckets"}
                   help={
                     <Fragment>
-                      MinIO uses buckets to organize objects. A bucket is
+                      Buckets are used to organize objects. A bucket is
                       similar to a folder or directory in a filesystem, where
                       each bucket can hold an arbitrary number of objects.
                       <br />

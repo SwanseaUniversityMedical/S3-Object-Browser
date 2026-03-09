@@ -305,6 +305,72 @@ paths:
             $ref: "#/definitions/ApiError"
       tags:
         - Object
+  /buckets/{bucket_name}/objects/upload-directory:
+    post:
+      summary: Uploads multiple files in a directory structure.
+      operationId: Upload Directory
+      security:
+        - key: [ ]
+        - anonymous: [ ]
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: bucket_name
+          in: path
+          required: true
+          type: string
+        - name: prefix
+          in: query
+          type: string
+          description: The S3 key prefix for the uploaded files
+      responses:
+        200:
+          description: A successful response with upload statistics.
+          schema:
+            type: object
+            properties:
+              totalFiles:
+                type: integer
+              successfulFiles:
+                type: integer
+              failedFiles:
+                type: integer
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/ApiError"
+      tags:
+        - Object
+  /buckets/{bucket_name}/objects/download-directory:
+    get:
+      summary: Download an entire directory/prefix as a zip file
+      operationId: Download Directory
+      security:
+        - key: [ ]
+        - anonymous: [ ]
+      produces:
+        - application/zip
+      parameters:
+        - name: bucket_name
+          in: path
+          required: true
+          type: string
+        - name: prefix
+          in: query
+          required: true
+          type: string
+          description: The S3 key prefix to download recursively
+      responses:
+        200:
+          description: A zip file containing all objects under the prefix.
+          schema:
+            type: file
+        default:
+          description: Generic error response.
+          schema:
+            $ref: "#/definitions/ApiError"
+      tags:
+        - Object
   /buckets/{bucket_name}/objects/download-multiple:
     post:
       summary: Download Multiple Objects

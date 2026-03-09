@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-openapi/runtime/middleware"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 )
 
 // DownloadMultipleObjectsHandlerFunc turns a function with the right signature into a download multiple objects handler

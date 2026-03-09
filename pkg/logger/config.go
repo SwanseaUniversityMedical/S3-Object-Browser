@@ -23,8 +23,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/minio/console/pkg/logger/config"
-	"github.com/minio/console/pkg/logger/target/http"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/config"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/target/http"
 	"github.com/minio/pkg/v3/env"
 )
 

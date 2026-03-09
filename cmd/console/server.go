@@ -22,12 +22,12 @@ import (
 	"path/filepath"
 	"syscall"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/certs"
 	"github.com/go-openapi/loads"
 	"github.com/jessevdk/go-flags"
 	"github.com/minio/cli"
-	"github.com/minio/console/api"
-	"github.com/minio/console/api/operations"
-	"github.com/minio/console/pkg/certs"
 )
 
 // starts the server

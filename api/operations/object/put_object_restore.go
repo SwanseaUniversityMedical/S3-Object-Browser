@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-openapi/runtime/middleware"
 
-	"github.com/minio/console/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 )
 
 // PutObjectRestoreHandlerFunc turns a function with the right signature into a put object restore handler

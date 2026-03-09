@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2022 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -53,6 +53,9 @@ const consoleSlice = createSlice({
         state.sessionLoadingState = SessionCallStates.Loading;
       })
       .addCase(fetchSession.fulfilled, (state, action) => {
+        state.sessionLoadingState = SessionCallStates.Done;
+      })
+      .addCase(fetchSession.rejected, (state, action) => {
         state.sessionLoadingState = SessionCallStates.Done;
       });
   },

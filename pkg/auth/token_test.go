@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -19,15 +19,13 @@ package auth
 import (
 	"testing"
 
-	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/stretchr/testify/assert"
 )
 
-var creds = &credentials.Value{
+var creds = &CredentialsValue{
 	AccessKeyID:     "fakeAccessKeyID",
 	SecretAccessKey: "fakeSecretAccessKey",
 	SessionToken:    "fakeSessionToken",
-	SignerType:      0,
 }
 
 var (

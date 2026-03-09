@@ -22,6 +22,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/minio/minio-go/v7/pkg/set"
@@ -132,5 +133,13 @@ func (pc ProviderConfig) GetARNInf() string {
 type OpenIDPCfg map[string]ProviderConfig
 
 func GetSTSEndpoint() string {
-	return strings.TrimSpace(env.Get(ConsoleMinIOServer, "http://localhost:9000"))
+	configured := strings.TrimSpace(env.Get(ConsoleMinIOServer, ""))
+	if configured != "" {
+		return configured
+	}
+	endpoint := strings.TrimSpace(os.Getenv("S3_ENDPOINT"))
+	if endpoint != "" {
+		return endpoint
+	}
+	return "http://localhost:9000"
 }

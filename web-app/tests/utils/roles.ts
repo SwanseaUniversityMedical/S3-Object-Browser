@@ -13,8 +13,8 @@ export const admin = Role(
   loginUrl,
   async (t) => {
     await t
-      .typeText("#accessKey", "minioadmin")
-      .typeText("#secretKey", "minioadmin")
+      .typeText("#accessKey", "s3admin")
+      .typeText("#secretKey", "s3admin")
       .click(submitButton);
   },
   { preserveUrl: true },

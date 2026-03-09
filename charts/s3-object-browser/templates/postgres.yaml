@@ -1,0 +1,95 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: postgres
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size }}
+  {{- if .Values.postgres.persistence.storageClassName }}
+  storageClassName: {{ .Values.postgres.persistence.storageClassName }}
+  {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: postgres
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: {{ .Values.postgres.auth.database }}
+        - name: POSTGRES_USER
+          value: {{ .Values.postgres.auth.username }}
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: postgres-secret
+              key: password
+        - name: POSTGRES_INITDB_ARGS
+          value: "--encoding=UTF8"
+        resources:
+          requests:
+            memory: {{ .Values.postgres.resources.requests.memory }}
+            cpu: {{ .Values.postgres.resources.requests.cpu }}
+          limits:
+            memory: {{ .Values.postgres.resources.limits.memory }}
+            cpu: {{ .Values.postgres.resources.limits.cpu }}
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d
+        livenessProbe:
+          exec:
+            command:
+              - pg_isready
+              - -U
+              - {{ .Values.postgres.auth.username }}
+              - -d
+              - {{ .Values.postgres.auth.database }}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: init-script
+        configMap:
+          name: postgres-init-script
+{{- end }}

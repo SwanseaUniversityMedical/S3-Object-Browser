@@ -120,6 +120,7 @@ import TooltipWrapper from "../../../../Common/TooltipWrapper/TooltipWrapper";
 import ListObjectsTable from "./ListObjectsTable";
 import FilterObjectsSB from "../../../../ObjectBrowser/FilterObjectsSB";
 import { sanitizeFilePath } from "./utils";
+import DirectoryOperationStats from "../../../../Common/ObjectManager/DirectoryOperationStats";
 
 const DeleteMultipleObjects = withSuspense(
   React.lazy(() => import("./DeleteMultipleObjects")),
@@ -520,10 +521,8 @@ const ListObjects = () => {
 
             if (prefixPath !== "") {
               uploadUrl = `${uploadUrl}?prefix=${encodeURIComponent(
-                prefixPath + fileName,
+                prefixPath,
               )}`;
-            } else {
-              uploadUrl = `${uploadUrl}?prefix=${encodeURIComponent(fileName)}`;
             }
 
             const identity = encodeURIComponent(
@@ -1121,6 +1120,7 @@ const ListObjects = () => {
           {...getRootProps({ style: { ...dndStyles } })}
         >
           <input {...getInputProps()} />
+          <DirectoryOperationStats visible={true} />
           <Box
             withBorders
             sx={{

@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/minio/console/pkg/auth/token"
-	"github.com/minio/console/pkg/auth/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/token"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/utils"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"github.com/minio/minio-go/v7/pkg/set"
 	"github.com/minio/pkg/v3/env"

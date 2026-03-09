@@ -29,11 +29,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/object"
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/minio/console/api/operations/object"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/go-openapi/swag"
-	"github.com/minio/console/models"
 	mc "github.com/minio/mc/cmd"
 	"github.com/minio/mc/pkg/probe"
 	"github.com/minio/minio-go/v7"

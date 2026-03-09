@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -27,12 +27,12 @@ import (
 
 	"github.com/go-openapi/errors"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	authApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/idp/oauth2"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
-	"github.com/minio/console/api/operations"
-	authApi "github.com/minio/console/api/operations/auth"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth/idp/oauth2"
 )
 
 func registerLogoutHandlers(api *operations.ConsoleAPI) {
@@ -82,42 +82,45 @@ func getLogoutResponse(session *models.Principal, params authApi.LogoutParams) *
 		}
 	}
 	creds := getConsoleCredentialsFromSession(session)
-	credentials := ConsoleCredentials{ConsoleCredentials: creds}
-	logout(credentials)
+	logout(creds)
 	return nil
 }
 
 func logoutFromIDPProvider(r *http.Request, state string) error {
-	decodedRState, err := base64.StdEncoding.DecodeString(state)
-	if err != nil {
-		return err
-	}
-	var requestItems oauth2.LoginURLParams
-	err = json.Unmarshal(decodedRState, &requestItems)
-	if err != nil {
-		return err
-	}
-	providerCfg := GlobalMinIOConfig.OpenIDProviders[requestItems.IDPName]
-	refreshToken, err := r.Cookie("idp-refresh-token")
-	if err != nil {
-		return err
-	}
-	if providerCfg.EndSessionEndpoint != "" {
-		params := url.Values{}
-		params.Add("client_id", providerCfg.ClientID)
-		params.Add("client_secret", providerCfg.ClientSecret)
-		params.Add("refresh_token", refreshToken.Value)
-		client := &http.Client{
-			Transport: GlobalTransport,
-		}
-		result, err := client.PostForm(providerCfg.EndSessionEndpoint, params)
+	// If state is provided (old style OpenID), use legacy logout
+	if state != "" {
+		decodedRState, err := base64.StdEncoding.DecodeString(state)
 		if err != nil {
-			return errors.New(500, "failed to logout: %v", err.Error())
+			return err
 		}
-		if result.StatusCode != 204 {
-			return errors.New(int32(result.StatusCode), "failed to logout")
+		var requestItems oauth2.LoginURLParams
+		err = json.Unmarshal(decodedRState, &requestItems)
+		if err != nil {
+			return err
+		}
+		providerCfg := GlobalMinIOConfig.OpenIDProviders[requestItems.IDPName]
+		refreshToken, err := r.Cookie("idp-refresh-token")
+		if err != nil {
+			return err
+		}
+		if providerCfg.EndSessionEndpoint != "" {
+			params := url.Values{}
+			params.Add("client_id", providerCfg.ClientID)
+			params.Add("client_secret", providerCfg.ClientSecret)
+			params.Add("refresh_token", refreshToken.Value)
+			client := &http.Client{
+				Transport: GlobalTransport,
+			}
+			result, err := client.PostForm(providerCfg.EndSessionEndpoint, params)
+			if err != nil {
+				return errors.New(500, "failed to logout: %v", err.Error())
+			}
+			if result.StatusCode != 204 {
+				return errors.New(int32(result.StatusCode), "failed to logout")
+			}
 		}
 	}
-
+	// For OAuth/Keycloak (new style), session is invalidated by clearing server-side cookies
+	// No additional IDP logout call needed - token is server-managed
 	return nil
 }

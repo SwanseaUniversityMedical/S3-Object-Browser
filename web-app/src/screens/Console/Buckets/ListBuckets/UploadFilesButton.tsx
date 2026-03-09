@@ -132,12 +132,14 @@ const UploadFilesButton = ({
             icon: <UploadIcon />,
             value: "file",
             disabled: !uploadObjectAllowed || forceDisable,
+            extraValue: "Single file upload",
           },
           {
             label: "Upload Folder",
             icon: <UploadFolderIcon />,
             value: "folder",
             disabled: !uploadFolderAllowed || forceDisable,
+            extraValue: "Bulk upload - Upload entire directory with structure preserved",
           },
         ]}
         selectedOption={""}
