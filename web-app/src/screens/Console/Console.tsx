@@ -162,6 +162,8 @@ const Console = () => {
     hideMenu = true;
   }
 
+  console.log("Console: hideMenu:", hideMenu, "features:", features, "obOnly:", obOnly, "pathname:", pathname);
+
   return (
     <Fragment>
       {session && session.status === "ok" ? (

@@ -18,11 +18,13 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strings"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/tenants"
@@ -106,6 +108,34 @@ func EnforceTenantForBucket(r *http.Request, bucketName string) error {
 	// Validate bucket belongs to tenant
 	if err := tenants.ValidateBucketBelongsToTenant(tenantID, bucketName); err != nil {
 		return fmt.Errorf("bucket access validation failed: %w", err)
+	}
+
+	return nil
+}
+
+// EnforceTenantAndBucketAccessForBucket validates both tenant and user-specific bucket access
+// This checks if the bucket belongs to the tenant AND if the user has access to the specific bucket
+func EnforceTenantAndBucketAccessForBucket(r *http.Request, session *models.Principal, bucketName string) error {
+	// First check tenant
+	if err := EnforceTenantForBucket(r, bucketName); err != nil {
+		return err
+	}
+
+	// If user has allowed buckets restrictions, check if this bucket is in the list
+	if session != nil && session.AllowedBuckets != "" {
+		var allowedBuckets []string
+		if err := json.Unmarshal([]byte(session.AllowedBuckets), &allowedBuckets); err == nil {
+			isAllowed := false
+			for _, bucket := range allowedBuckets {
+				if bucket == bucketName {
+					isAllowed = true
+					break
+				}
+			}
+			if !isAllowed {
+				return fmt.Errorf("user does not have access to bucket: %s", bucketName)
+			}
+		}
 	}
 
 	return nil

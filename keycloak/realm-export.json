@@ -21,7 +21,8 @@
         "/tenant-1"
       ],
       "attributes": {
-        "policy": ["readwrite"]
+        "policy": ["readwrite"],
+        "buckets": ["default-test", "uploads"]
       },
       "credentials": [
         {
@@ -123,6 +124,20 @@
             "id.token.claim": "true",
             "access.token.claim": "true",
             "claim.name": "groups"
+          }
+        },
+        {
+          "name": "buckets",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "buckets",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "buckets",
+            "jsonType.label": "String",
+            "multivalued": "true"
           }
         }
       ]

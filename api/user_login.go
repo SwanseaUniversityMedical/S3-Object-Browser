@@ -157,19 +157,67 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 
 	// Extract policy from JWT for logging/future enforcement
 	parser := jwtgo.NewParser()
-	claims := jwtgo.MapClaims{}
-	_, _, _ = parser.ParseUnverified(tokenResponse.IDToken, &claims)
+	idClaims := jwtgo.MapClaims{}
+	_, _, _ = parser.ParseUnverified(tokenResponse.IDToken, &idClaims)
+	accessClaims := jwtgo.MapClaims{}
+	if tokenResponse.AccessToken != "" {
+		_, _, _ = parser.ParseUnverified(tokenResponse.AccessToken, &accessClaims)
+	}
 
 	var policyName string
-	if policies, ok := claims["policy"].([]interface{}); ok && len(policies) > 0 {
+	if policies, ok := idClaims["policy"].([]interface{}); ok && len(policies) > 0 {
 		if policy, ok := policies[0].(string); ok {
 			policyName = policy
 		}
-	} else if policy, ok := claims["policy"].(string); ok {
+	} else if policy, ok := idClaims["policy"].(string); ok {
+		policyName = policy
+	} else if policies, ok := accessClaims["policy"].([]interface{}); ok && len(policies) > 0 {
+		if policy, ok := policies[0].(string); ok {
+			policyName = policy
+		}
+	} else if policy, ok := accessClaims["policy"].(string); ok {
 		policyName = policy
 	}
 
-	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: OIDC login for tenant: %s with policy: %s", tenantID, policyName))
+	// Extract allowed buckets from JWT
+	var allowedBuckets []string
+	if buckets, ok := idClaims["buckets"].([]interface{}); ok {
+		// If it comes as an array
+		for _, bucket := range buckets {
+			if bucketStr, ok := bucket.(string); ok {
+				allowedBuckets = append(allowedBuckets, bucketStr)
+			}
+		}
+	} else if bucketStr, ok := idClaims["buckets"].(string); ok {
+		// If it comes as a JSON string, try to unmarshal it
+		var parsedBuckets []string
+		if err := json.Unmarshal([]byte(bucketStr), &parsedBuckets); err == nil {
+			allowedBuckets = parsedBuckets
+		} else {
+			// If not JSON array, treat as single bucket name
+			allowedBuckets = []string{bucketStr}
+		}
+	}
+
+	// Fallback to access token if buckets are not present in ID token
+	if len(allowedBuckets) == 0 {
+		if buckets, ok := accessClaims["buckets"].([]interface{}); ok {
+			for _, bucket := range buckets {
+				if bucketStr, ok := bucket.(string); ok {
+					allowedBuckets = append(allowedBuckets, bucketStr)
+				}
+			}
+		} else if bucketStr, ok := accessClaims["buckets"].(string); ok {
+			var parsedBuckets []string
+			if err := json.Unmarshal([]byte(bucketStr), &parsedBuckets); err == nil {
+				allowedBuckets = parsedBuckets
+			} else {
+				allowedBuckets = []string{bucketStr}
+			}
+		}
+	}
+
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: OIDC login for tenant: %s with policy: %s and buckets: %v", tenantID, policyName, allowedBuckets))
 
 	// Use static S3 credentials for now
 	// For admin user with adminaccess policy: full MinIO access
@@ -182,7 +230,7 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 		return nil, fmt.Errorf("S3 credentials not configured")
 	}
 
-	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Creating session for OIDC user %s from tenant: %s", claims["preferred_username"], tenantID))
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Creating session for OIDC user %s from tenant: %s", idClaims["preferred_username"], tenantID))
 
 	// Create JWT token with S3 credentials and tenant context
 	credsValue := &auth.CredentialsValue{
@@ -192,8 +240,10 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 	}
 
 	sessionFeatures := &auth.SessionFeatures{
-		TenantID: tenantID,
+		TenantID:       tenantID,
+		AllowedBuckets: allowedBuckets,
 	}
+
 	token, err := auth.NewEncryptedTokenForClient(credsValue, accessKey, sessionFeatures)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session token: %w", err)

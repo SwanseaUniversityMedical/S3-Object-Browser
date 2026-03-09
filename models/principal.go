@@ -57,6 +57,9 @@ type Principal struct {
 
 	// tenant ID for multi-tenancy isolation
 	TenantID string `json:"tenantId,omitempty"`
+
+	// allowed buckets for the user (JSON string array)
+	AllowedBuckets string `json:"allowedBuckets,omitempty"`
 }
 
 // Validate validates this principal

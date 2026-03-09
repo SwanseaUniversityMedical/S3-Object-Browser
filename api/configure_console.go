@@ -22,6 +22,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -94,6 +95,12 @@ func configureAPI(api *operations.ConsoleAPI) http.Handler {
 			api.Logger("Unable to validate the session token %s: %v", token, err)
 			return nil, errors.New(401, "incorrect api key auth")
 		}
+		var allowedBucketsJSON string
+		if len(claims.AllowedBuckets) > 0 {
+			if bucketData, marshalErr := json.Marshal(claims.AllowedBuckets); marshalErr == nil {
+				allowedBucketsJSON = string(bucketData)
+			}
+		}
 		return &models.Principal{
 			STSAccessKeyID:     claims.STSAccessKeyID,
 			STSSecretAccessKey: claims.STSSecretAccessKey,
@@ -103,6 +110,7 @@ func configureAPI(api *operations.ConsoleAPI) http.Handler {
 			Ob:                 claims.ObjectBrowser,
 			CustomStyleOb:      claims.CustomStyleOB,
 			TenantID:           claims.TenantID,
+			AllowedBuckets:     allowedBucketsJSON,
 		}, nil
 	}
 	api.AnonymousAuth = func(_ string) (*models.Principal, error) {

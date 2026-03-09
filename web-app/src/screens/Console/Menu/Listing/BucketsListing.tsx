@@ -25,19 +25,20 @@ import {
 } from "../../../../systemSlice";
 import { errorToHandler } from "../../../../api/errors";
 import BucketListItem from "./BucketListItem";
-import VirtualizedList from "../../Common/VirtualizedList/VirtualizedList";
 import get from "lodash/get";
 import { useTheme } from "styled-components";
 import BucketFiltering from "./BucketFiltering";
 import { useSelector } from "react-redux";
 
-// Component wrappers
+// Local menu component stubs - not exported from mds
 const MenuDivider = () => null;
 const MenuSectionHeader = (props: any) => null;
 
 const ListBuckets = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
+
+  console.log("BucketsListing: Component rendering");
 
   const filterBuckets = useSelector(
     (state: AppState) => state.system.filterBucketList,
@@ -52,22 +53,35 @@ const ListBuckets = () => {
   const [records, setRecords] = useState<Bucket[]>([]);
 
   useEffect(() => {
-    if (loadingBuckets) {
-      const fetchRecords = () => {
-        dispatch(setBucketLoadListing(true));
-        api.buckets.listBuckets().then((res) => {
+    const fetchRecords = () => {
+      console.log("BucketsListing: Starting fetch");
+      dispatch(setBucketLoadListing(true));
+      api.buckets
+        .listBuckets()
+        .then((res) => {
+          console.log("BucketsListing: API response:", res);
           if (res.data) {
-            dispatch(setBucketLoadListing(false));
+            console.log("BucketsListing: Setting records:", res.data.buckets);
             setRecords(res.data.buckets || []);
           } else if (res.error) {
-            dispatch(setBucketLoadListing(false));
+            console.log("BucketsListing: API error:", res.error);
             dispatch(setErrorSnackMessage(errorToHandler(res.error)));
           }
+        })
+        .catch((err) => {
+          console.log("BucketsListing: Fetch error:", err);
+          dispatch(setErrorSnackMessage(errorToHandler(err)));
+        })
+        .finally(() => {
+          dispatch(setBucketLoadListing(false));
         });
-      };
+    };
+
+    if (loadingBuckets || records.length === 0) {
+      console.log("BucketsListing: Condition met, calling fetch. loadingBuckets:", loadingBuckets, "records.length:", records.length);
       fetchRecords();
     }
-  }, [loadingBuckets, dispatch]);
+  }, [loadingBuckets, records.length, dispatch]);
 
   const filteredRecords = records.filter((b: Bucket) => {
     if (filterBuckets === "") {
@@ -77,88 +91,90 @@ const ListBuckets = () => {
     }
   });
 
-  const renderItemLine = (index: number) => {
-    const bucket = filteredRecords[index] || null;
-    if (bucket) {
-      return <BucketListItem bucket={bucket} />;
-    }
-    return null;
-  };
-
   return (
     <Fragment>
-      {!loadingBuckets && records.length !== 0 && (
-        <Fragment>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          color: "#fff",
+          "& .menuHeader": {
+            marginTop: 10,
+            color: "#fff",
+          },
+          "& .labelContainer": {
+            textAlign: "left",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            flexGrow: 1,
+            width: 150,
+            color: "#fff",
+          },
+        }}
+      >
+        <BucketFiltering />
+        <Box
+          sx={{
+            padding: "10px 15px 5px",
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "rgba(255,255,255,0.7)",
+            textTransform: "uppercase",
+            letterSpacing: "0.5px",
+          }}
+        >
+          Buckets
+        </Box>
+        {filteredRecords.length > 0 && (
           <Box
             sx={{
               display: "block",
-              "& .menuHeader": {
-                marginTop: 10,
+              flexGrow: 1,
+              overflowY: "auto",
+              "& .bucketsListing": {
+                "&::-webkit-scrollbar": {
+                  width: 5,
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  backgroundColor: "rgba(255,255,255,0.3)",
+                },
+                "&::-webkit-scrollbar-thumb:hover": {
+                  backgroundColor: "rgba(255,255,255,0.5)",
+                },
               },
-              "& .labelContainer": {
-                textAlign: "left",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                flexGrow: 1,
-                width: 150,
+            }}
+            className={"bucketsListing"}
+          >
+            {filteredRecords.map((bucket: Bucket) => (
+              <BucketListItem key={bucket.name} bucket={bucket} />
+            ))}
+          </Box>
+        )}
+        {filteredRecords.length === 0 && filterBuckets !== "" && sidebarOpen && (
+          <Box
+            sx={{
+              "& .helpbox-container": {
+                backgroundColor: "transparent",
+                color: "#FFF",
+                border: 0,
               },
             }}
           >
-            <BucketFiltering />
-            <MenuSectionHeader label={"Buckets"} />
-            {filteredRecords.length > 0 && (
-              <Box
-                sx={{
-                  display: "block",
-                  height: "calc(100vh - 380px)",
-                  "& .bucketsListing": {
-                    "&::-webkit-scrollbar": {
-                      width: 5,
-                    },
-                    "&::-webkit-scrollbar-thumb": {
-                      backgroundColor: get(theme, "bulletColor", "#2781B0"),
-                    },
-                    "&::-webkit-scrollbar-thumb:hover": {
-                      backgroundColor: "#fff",
-                    },
-                  },
-                }}
-              >
-                <VirtualizedList
-                  rowRenderFunction={renderItemLine}
-                  totalItems={filteredRecords.length}
-                  defaultHeight={35}
-                />
-              </Box>
-            )}
-            {filteredRecords.length === 0 &&
-              filterBuckets !== "" &&
-              sidebarOpen && (
-                <Box
-                  sx={{
-                    "& .helpbox-container": {
-                      backgroundColor: "transparent",
-                      color: get(theme, "menu.vertical.textColor", "#FFF"),
-                      border: 0,
-                    },
-                  }}
-                >
-                  <HelpBox
-                    iconComponent={<BucketsIcon />}
-                    title={"No Results"}
-                    help={
-                      <Box sx={{ textAlign: "center" }}>
-                        No buckets match the filtering condition
-                      </Box>
-                    }
-                  />
+            <HelpBox
+              iconComponent={<BucketsIcon />}
+              title={"No Results"}
+              help={
+                <Box sx={{ textAlign: "center" }}>
+                  No buckets match the filtering condition
                 </Box>
-              )}
+              }
+            />
           </Box>
-          <MenuDivider />
-        </Fragment>
-      )}
+        )}
+      </Box>
+      <MenuDivider />
     </Fragment>
   );
 };

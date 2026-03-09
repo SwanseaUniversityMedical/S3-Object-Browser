@@ -65,7 +65,7 @@ func registerBucketsHandlers(api *operations.ConsoleAPI) {
 	})
 	// get bucket info
 	api.BucketBucketInfoHandler = bucketApi.BucketInfoHandlerFunc(func(params bucketApi.BucketInfoParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.Name); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.Name); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return bucketApi.NewBucketInfoDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -78,7 +78,7 @@ func registerBucketsHandlers(api *operations.ConsoleAPI) {
 	})
 	// get bucket versioning
 	api.BucketGetBucketVersioningHandler = bucketApi.GetBucketVersioningHandlerFunc(func(params bucketApi.GetBucketVersioningParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return bucketApi.NewGetBucketVersioningDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -90,7 +90,7 @@ func registerBucketsHandlers(api *operations.ConsoleAPI) {
 	})
 	// update bucket versioning
 	api.BucketSetBucketVersioningHandler = bucketApi.SetBucketVersioningHandlerFunc(func(params bucketApi.SetBucketVersioningParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return bucketApi.NewSetBucketVersioningDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -102,7 +102,7 @@ func registerBucketsHandlers(api *operations.ConsoleAPI) {
 	})
 	// get objects rewind for a bucket
 	api.BucketGetBucketRewindHandler = bucketApi.GetBucketRewindHandlerFunc(func(params bucketApi.GetBucketRewindParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return bucketApi.NewGetBucketRewindDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -176,7 +176,7 @@ func getBucketVersionedResponse(session *models.Principal, params bucketApi.GetB
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
 
-	if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+	if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
 
@@ -274,6 +274,18 @@ func getListBucketsResponse(session *models.Principal, params bucketApi.ListBuck
 		return nil, ErrorWithContext(ctx, err)
 	}
 
+	// Parse allowed buckets from session if present
+	var allowedBuckets map[string]bool
+	if session.AllowedBuckets != "" {
+		var bucketList []string
+		if err := json.Unmarshal([]byte(session.AllowedBuckets), &bucketList); err == nil {
+			allowedBuckets = make(map[string]bool)
+			for _, bucket := range bucketList {
+				allowedBuckets[bucket] = true
+			}
+		}
+	}
+
 	s3Client, err := newS3Client(session, getClientIP(params.HTTPRequest))
 	if err != nil {
 		return nil, ErrorWithContext(ctx, err)
@@ -284,7 +296,7 @@ func getListBucketsResponse(session *models.Principal, params bucketApi.ListBuck
 		return nil, ErrorWithContext(ctx, err)
 	}
 
-	allowedBuckets := make([]*models.Bucket, 0, len(result.Buckets))
+	filteredBuckets := make([]*models.Bucket, 0, len(result.Buckets))
 	for _, bucket := range result.Buckets {
 		if bucket.Name == nil {
 			continue
@@ -293,6 +305,12 @@ func getListBucketsResponse(session *models.Principal, params bucketApi.ListBuck
 		if err := tenants.ValidateBucketBelongsToTenant(tenantID, bucketName); err != nil {
 			continue
 		}
+
+		// If user has specific allowed buckets, check if this bucket is in the list
+		if allowedBuckets != nil && !allowedBuckets[bucketName] {
+			continue
+		}
+
 		versioningResult, err := s3Client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{
 			Bucket: aws.String(bucketName),
 		})
@@ -324,13 +342,13 @@ func getListBucketsResponse(session *models.Principal, params bucketApi.ListBuck
 			bucketModel.CreationDate = bucket.CreationDate.Format(time.RFC3339)
 		}
 
-		allowedBuckets = append(allowedBuckets, bucketModel)
+		filteredBuckets = append(filteredBuckets, bucketModel)
 	}
 
 	// serialize output
 	listBucketsResponse := &models.ListBucketsResponse{
-		Buckets: allowedBuckets,
-		Total:   int64(len(allowedBuckets)),
+		Buckets: filteredBuckets,
+		Total:   int64(len(filteredBuckets)),
 	}
 	return listBucketsResponse, nil
 }
@@ -361,7 +379,7 @@ func getMakeBucketResponse(session *models.Principal, params bucketApi.MakeBucke
 	if br == nil {
 		return nil, ErrorWithContext(ctx, ErrBucketBodyNotInRequest)
 	}
-	if err := EnforceTenantForBucket(params.HTTPRequest, *br.Name); err != nil {
+	if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, *br.Name); err != nil {
 		return nil, ErrorWithContext(ctx, err)
 	}
 	client, err := newS3ClientInterface(session, getClientIP(params.HTTPRequest))

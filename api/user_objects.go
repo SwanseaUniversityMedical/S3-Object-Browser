@@ -55,7 +55,7 @@ const (
 func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	// list objects
 	api.ObjectListObjectsHandler = objectApi.ListObjectsHandlerFunc(func(params objectApi.ListObjectsParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewListObjectsDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -67,7 +67,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// delete object
 	api.ObjectDeleteObjectHandler = objectApi.DeleteObjectHandlerFunc(func(params objectApi.DeleteObjectParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewDeleteObjectDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -78,7 +78,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// delete multiple objects
 	api.ObjectDeleteMultipleObjectsHandler = objectApi.DeleteMultipleObjectsHandlerFunc(func(params objectApi.DeleteMultipleObjectsParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewDeleteMultipleObjectsDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -89,7 +89,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// download object
 	api.ObjectDownloadObjectHandler = objectApi.DownloadObjectHandlerFunc(func(params objectApi.DownloadObjectParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewDownloadObjectDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -115,7 +115,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// download multiple objects
 	api.ObjectDownloadMultipleObjectsHandler = objectApi.DownloadMultipleObjectsHandlerFunc(func(params objectApi.DownloadMultipleObjectsParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewDownloadMultipleObjectsDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -135,7 +135,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 
 	// upload object
 	api.ObjectPostBucketsBucketNameObjectsUploadHandler = objectApi.PostBucketsBucketNameObjectsUploadHandlerFunc(func(params objectApi.PostBucketsBucketNameObjectsUploadParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewPostBucketsBucketNameObjectsUploadDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -149,7 +149,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// get share object url
 	api.ObjectShareObjectHandler = objectApi.ShareObjectHandlerFunc(func(params objectApi.ShareObjectParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewShareObjectDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -161,7 +161,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// set tags in object
 	api.ObjectPutObjectTagsHandler = objectApi.PutObjectTagsHandlerFunc(func(params objectApi.PutObjectTagsParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewPutObjectTagsDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -172,7 +172,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// Restore file version
 	api.ObjectPutObjectRestoreHandler = objectApi.PutObjectRestoreHandlerFunc(func(params objectApi.PutObjectRestoreParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewPutObjectRestoreDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}
@@ -183,7 +183,7 @@ func registerObjectsHandlers(api *operations.ConsoleAPI) {
 	})
 	// Metadata in object
 	api.ObjectGetObjectMetadataHandler = objectApi.GetObjectMetadataHandlerFunc(func(params objectApi.GetObjectMetadataParams, session *models.Principal) middleware.Responder {
-		if err := EnforceTenantForBucket(params.HTTPRequest, params.BucketName); err != nil {
+		if err := EnforceTenantAndBucketAccessForBucket(params.HTTPRequest, session, params.BucketName); err != nil {
 			apiErr := ErrorWithContext(params.HTTPRequest.Context(), err)
 			return objectApi.NewGetObjectMetadataDefault(apiErr.Code).WithPayload(apiErr.APIError)
 		}

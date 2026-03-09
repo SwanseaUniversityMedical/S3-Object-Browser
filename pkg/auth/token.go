@@ -67,14 +67,15 @@ func IsSessionTokenValid(token string) bool {
 
 // TokenClaims claims struct for decrypted credentials
 type TokenClaims struct {
-	STSAccessKeyID     string `json:"stsAccessKeyID,omitempty"`
-	STSSecretAccessKey string `json:"stsSecretAccessKey,omitempty"`
-	STSSessionToken    string `json:"stsSessionToken,omitempty"`
-	AccountAccessKey   string `json:"accountAccessKey,omitempty"`
-	HideMenu           bool   `json:"hm,omitempty"`
-	ObjectBrowser      bool   `json:"ob,omitempty"`
-	CustomStyleOB      string `json:"customStyleOb,omitempty"`
-	TenantID           string `json:"tenantId,omitempty"`
+	STSAccessKeyID     string   `json:"stsAccessKeyID,omitempty"`
+	STSSecretAccessKey string   `json:"stsSecretAccessKey,omitempty"`
+	STSSessionToken    string   `json:"stsSessionToken,omitempty"`
+	AccountAccessKey   string   `json:"accountAccessKey,omitempty"`
+	HideMenu           bool     `json:"hm,omitempty"`
+	ObjectBrowser      bool     `json:"ob,omitempty"`
+	CustomStyleOB      string   `json:"customStyleOb,omitempty"`
+	TenantID           string   `json:"tenantId,omitempty"`
+	AllowedBuckets     []string `json:"buckets,omitempty"`
 }
 
 // STSClaims claims struct for STS Token
@@ -84,10 +85,11 @@ type STSClaims struct {
 
 // SessionFeatures represents features stored in the session
 type SessionFeatures struct {
-	HideMenu      bool
-	ObjectBrowser bool
-	CustomStyleOB string
-	TenantID      string
+	HideMenu       bool
+	ObjectBrowser  bool
+	CustomStyleOB  string
+	TenantID       string
+	AllowedBuckets []string
 }
 
 // SessionTokenAuthenticate takes a session token, decode it, extract claims and validate the signature
@@ -134,6 +136,7 @@ func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey 
 			tokenClaims.ObjectBrowser = features.ObjectBrowser
 			tokenClaims.CustomStyleOB = features.CustomStyleOB
 			tokenClaims.TenantID = features.TenantID
+			tokenClaims.AllowedBuckets = features.AllowedBuckets
 		}
 
 		encryptedClaims, err := encryptClaims(tokenClaims)
@@ -346,10 +349,21 @@ func GetClaimsFromTokenInRequest(req *http.Request) (*models.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Serialize allowed buckets to JSON string for Principal
+	var allowedBucketsJSON string
+	if len(claims.AllowedBuckets) > 0 {
+		bucketData, err := json.Marshal(claims.AllowedBuckets)
+		if err == nil {
+			allowedBucketsJSON = string(bucketData)
+		}
+	}
+
 	return &models.Principal{
 		STSAccessKeyID:     claims.STSAccessKeyID,
 		STSSecretAccessKey: claims.STSSecretAccessKey,
 		STSSessionToken:    claims.STSSessionToken,
 		AccountAccessKey:   claims.AccountAccessKey,
+		AllowedBuckets:     allowedBucketsJSON,
 	}, nil
 }

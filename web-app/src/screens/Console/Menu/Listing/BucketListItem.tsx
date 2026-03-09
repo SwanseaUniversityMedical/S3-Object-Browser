@@ -16,11 +16,8 @@
 
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { BucketsIcon, Menu } from "mds";
+import { Box, BucketsIcon } from "mds";
 import { Bucket } from "../../../../api/consoleApi";
-
-// MenuItem component wrapper
-const MenuItem = (props: any) => null;
 
 interface IBucketListItem {
   bucket: Bucket;
@@ -30,12 +27,40 @@ const BucketListItem = ({ bucket }: IBucketListItem) => {
   const navigate = useNavigate();
 
   return (
-    <MenuItem
-      name={bucket.name}
-      icon={<BucketsIcon />}
+    <Box
       onClick={() => navigate(`/browser/${bucket.name}`)}
       id={`manageBucket-${bucket.name}`}
-    />
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        padding: "8px 12px",
+        cursor: "pointer",
+        borderRadius: 1,
+        width: "100%",
+        color: "#fff",
+        "& svg": {
+          fill: "#fff",
+        },
+        "&:hover": {
+          backgroundColor: "rgba(255, 255, 255, 0.15)",
+        },
+      }}
+    >
+      <BucketsIcon />
+      <Box
+        sx={{
+          textAlign: "left",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          flexGrow: 1,
+          color: "#fff",
+        }}
+      >
+        {bucket.name}
+      </Box>
+    </Box>
   );
 };
 
