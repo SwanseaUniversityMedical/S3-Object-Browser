@@ -155,9 +155,8 @@ const KeycloakLogin = () => {
           marginTop: "8px",
         }}
       >
-        You will be redirected to the identity provider to authenticate.
+        You will be redirected to Keycloak to authenticate.
         <br />
-        No credentials are stored in your browser.
       </Box>
     </Box>
   );
