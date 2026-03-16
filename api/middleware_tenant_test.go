@@ -22,6 +22,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/tenants"
 	"github.com/stretchr/testify/assert"
@@ -244,4 +245,24 @@ func TestTenantTamperingDetection(t *testing.T) {
 
 	// Should reject tampering attempt with 403 Forbidden
 	assert.Equal(t, http.StatusForbidden, w.Code)
+}
+
+// TestRestrictedBucketReturns404 verifies that accessing a bucket not in the user's
+// AllowedBuckets list produces 404 (not 403), preventing bucket name enumeration.
+func TestRestrictedBucketReturns404(t *testing.T) {
+	allowedBuckets, _ := json.Marshal([]string{"allowed-bucket"})
+	session := &models.Principal{
+		AllowedBuckets: string(allowedBuckets),
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/buckets/secret-bucket", nil)
+	ctx := tenants.SetTenantInContext(req.Context(), tenants.TenantID("default"))
+	req = req.WithContext(ctx)
+
+	err := EnforceTenantAndBucketAccessForBucket(req, session, "secret-bucket")
+	assert.NotNil(t, err, "expected an error for bucket not in AllowedBuckets")
+
+	apiErr := ErrorWithContext(req.Context(), err)
+	assert.Equal(t, 404, apiErr.Code,
+		"restricted bucket should return 404, not 403, to prevent bucket enumeration")
 }

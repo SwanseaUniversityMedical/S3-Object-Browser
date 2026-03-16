@@ -14,12 +14,16 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import React, { Fragment, useCallback, useEffect } from "react";
+import React, { Fragment, useCallback, useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { useLocation, useParams } from "react-router-dom";
 import { api } from "api";
 import { AppState, useAppDispatch } from "../../../../store";
 import { IAM_SCOPES } from "../../../../common/SecureComponent/permissions";
+import LoadingComponent from "../../../../common/LoadingComponent";
+import NotFoundPage from "../../../NotFoundPage";
+import { errorToHandler } from "../../../../api/errors";
+import { setErrorSnackMessage } from "../../../../systemSlice";
 import {
   resetMessages,
   setIsVersioned,
@@ -29,6 +33,7 @@ import {
   setLoadingVersions,
   setObjectDetailsView,
   setRequestInProgress,
+  setSelectedBucket,
   setSelectedObjectView,
   setVersionsModeEnabled,
 } from "../../ObjectBrowser/objectBrowserSlice";
@@ -40,6 +45,9 @@ const BrowserHandler = () => {
   const dispatch = useAppDispatch();
   const params = useParams();
   const location = useLocation();
+  const [bucketRouteStatus, setBucketRouteStatus] = useState<
+    "loading" | "ready" | "missing"
+  >("loading");
 
   const loadingVersioning = useSelector(
     (state: AppState) => state.objectBrowser.loadingVersioning,
@@ -77,6 +85,50 @@ const BrowserHandler = () => {
   );
   const internalPaths =
     pathSegment.length === 2 ? decodeURIComponent(pathSegment[1]) : "";
+
+  useEffect(() => {
+    let isActive = true;
+
+    dispatch(resetMessages());
+    dispatch(setSelectedBucket(""));
+
+    if (!bucketName) {
+      setBucketRouteStatus("missing");
+      return () => {
+        isActive = false;
+      };
+    }
+
+    setBucketRouteStatus("loading");
+
+    api.buckets
+      .bucketInfo(bucketName)
+      .then(() => {
+        if (!isActive) {
+          return;
+        }
+
+        dispatch(setSelectedBucket(bucketName));
+        setBucketRouteStatus("ready");
+      })
+      .catch((err) => {
+        if (!isActive) {
+          return;
+        }
+
+        if (err?.status === 404 || err?.status === 403) {
+          setBucketRouteStatus("missing");
+          return;
+        }
+
+        dispatch(setErrorSnackMessage(errorToHandler(err?.error || err)));
+        setBucketRouteStatus("missing");
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [bucketName, dispatch]);
 
   const initWSRequest = useCallback(
     (path: string) => {
@@ -137,13 +189,21 @@ const BrowserHandler = () => {
   );
 
   useEffect(() => {
+    if (bucketRouteStatus !== "ready") {
+      return;
+    }
+
     return () => {
       dispatch({ type: "socket/OBCancelLast" });
     };
-  }, [dispatch]);
+  }, [bucketRouteStatus, dispatch]);
 
   // Object Details handler
   useEffect(() => {
+    if (bucketRouteStatus !== "ready") {
+      return;
+    }
+
     dispatch(setLoadingVersioning(true));
 
     if (internalPaths.endsWith("/") || internalPaths === "") {
@@ -156,19 +216,40 @@ const BrowserHandler = () => {
       dispatch(setLoadingVersions(true));
       dispatch(setSelectedObjectView(internalPaths || ""));
     }
-  }, [bucketName, internalPaths, rewindDate, rewindEnabled, dispatch]);
+  }, [
+    bucketName,
+    internalPaths,
+    rewindDate,
+    rewindEnabled,
+    bucketRouteStatus,
+    dispatch,
+  ]);
 
   // Navigation Listing Request
   useEffect(() => {
+    if (bucketRouteStatus !== "ready") {
+      return;
+    }
+
     pathLoad(false);
-  }, [pathLoad]);
+  }, [bucketRouteStatus, pathLoad]);
 
   // Reload Handler
   useEffect(() => {
+    if (bucketRouteStatus !== "ready") {
+      return;
+    }
+
     if (reloadObjectsList && records.length === 0 && !requestInProgress) {
       pathLoad(true);
     }
-  }, [reloadObjectsList, records, requestInProgress, pathLoad]);
+  }, [
+    bucketRouteStatus,
+    reloadObjectsList,
+    records,
+    requestInProgress,
+    pathLoad,
+  ]);
 
   const displayListObjects =
     hasPermission(bucketName, [
@@ -177,6 +258,10 @@ const BrowserHandler = () => {
     ]) || anonymousMode;
 
   useEffect(() => {
+    if (bucketRouteStatus !== "ready") {
+      return;
+    }
+
     if (loadingVersioning && !anonymousMode) {
       if (displayListObjects) {
         api.buckets
@@ -199,11 +284,20 @@ const BrowserHandler = () => {
     }
   }, [
     bucketName,
+    bucketRouteStatus,
     loadingVersioning,
     dispatch,
     displayListObjects,
     anonymousMode,
   ]);
+
+  if (bucketRouteStatus === "loading") {
+    return <LoadingComponent />;
+  }
+
+  if (bucketRouteStatus === "missing") {
+    return <NotFoundPage />;
+  }
 
   return (
     <Fragment>

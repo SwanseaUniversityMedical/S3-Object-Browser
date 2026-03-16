@@ -102,7 +102,7 @@ func ErrorWithContext(ctx context.Context, err ...interface{}) *CodedAPIError {
 			if err1.Error() == ErrBadRequest.Error() {
 				errorCode = 400
 			}
-			if err1 == ErrNotFound {
+			if errors.Is(err1, ErrNotFound) {
 				errorCode = 404
 				errorMessage = ErrNotFound.Error()
 			}
