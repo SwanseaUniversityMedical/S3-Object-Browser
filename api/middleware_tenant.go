@@ -107,7 +107,7 @@ func EnforceTenantForBucket(r *http.Request, bucketName string) error {
 
 	// Validate bucket belongs to tenant
 	if err := tenants.ValidateBucketBelongsToTenant(tenantID, bucketName); err != nil {
-		return fmt.Errorf("bucket access validation failed: %w", err)
+		return fmt.Errorf("%w: bucket %s is outside tenant scope", ErrAccessDenied, bucketName)
 	}
 
 	return nil
@@ -133,7 +133,7 @@ func EnforceTenantAndBucketAccessForBucket(r *http.Request, session *models.Prin
 				}
 			}
 			if !isAllowed {
-				return fmt.Errorf("user does not have access to bucket: %s", bucketName)
+				return fmt.Errorf("%w: bucket %s", ErrAccessDenied, bucketName)
 			}
 		}
 	}

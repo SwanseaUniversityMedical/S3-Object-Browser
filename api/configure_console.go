@@ -445,14 +445,15 @@ func handleSPA(w http.ResponseWriter, r *http.Request) {
 				http.Redirect(w, r, "/login", http.StatusFound)
 				return
 			}
-		} else if err == auth.ErrNoAuthToken {
+		} else if err == auth.ErrNoAuthToken || err == auth.ErrTokenExpired || err == auth.ErrTokenRevoked {
 			// No auth token at all - redirect to login
 			fmt.Printf("DEBUG: No auth token, redirecting to login\n")
 			http.Redirect(w, r, "/login", http.StatusFound)
 			return
 		} else {
-			// Other errors - continue to serve (will fail at API level)
-			fmt.Printf("DEBUG: Other error (%v), continuing\n", err)
+			fmt.Printf("DEBUG: Invalid auth state (%v), redirecting to login\n", err)
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
 		}
 	}
 

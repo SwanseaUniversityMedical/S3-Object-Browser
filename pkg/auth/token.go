@@ -30,6 +30,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
@@ -51,8 +52,18 @@ type CredentialsValue struct {
 var (
 	ErrNoAuthToken  = errors.New("session token missing")
 	ErrTokenExpired = errors.New("session token has expired")
+	ErrTokenRevoked = errors.New("session token has been revoked")
 	ErrReadingToken = errors.New("session token internal data is malformed")
 )
+
+const revokedSessionRetention = 12 * time.Hour
+
+var revokedSessionTokens = struct {
+	mu     sync.RWMutex
+	tokens map[string]time.Time
+}{
+	tokens: make(map[string]time.Time),
+}
 
 // derivedKey is the key used to encrypt the session token claims, its derived using pbkdf on CONSOLE_PBKDF_PASSPHRASE with CONSOLE_PBKDF_SALT
 var derivedKey = func() []byte {
@@ -63,6 +74,51 @@ var derivedKey = func() []byte {
 func IsSessionTokenValid(token string) bool {
 	_, err := SessionTokenAuthenticate(token)
 	return err == nil
+}
+
+func RevokeSessionToken(token string) {
+	normalizedToken := strings.TrimSpace(token)
+	if normalizedToken == "" {
+		return
+	}
+
+	now := time.Now()
+	revokedSessionTokens.mu.Lock()
+	cleanupRevokedSessionTokensLocked(now)
+	revokedSessionTokens.tokens[normalizedToken] = now.Add(revokedSessionRetention)
+	revokedSessionTokens.mu.Unlock()
+}
+
+func IsSessionTokenRevoked(token string) bool {
+	normalizedToken := strings.TrimSpace(token)
+	if normalizedToken == "" {
+		return false
+	}
+
+	now := time.Now()
+	revokedSessionTokens.mu.RLock()
+	expiry, ok := revokedSessionTokens.tokens[normalizedToken]
+	revokedSessionTokens.mu.RUnlock()
+	if !ok {
+		return false
+	}
+
+	if !expiry.IsZero() && now.After(expiry) {
+		revokedSessionTokens.mu.Lock()
+		delete(revokedSessionTokens.tokens, normalizedToken)
+		revokedSessionTokens.mu.Unlock()
+		return false
+	}
+
+	return true
+}
+
+func cleanupRevokedSessionTokensLocked(now time.Time) {
+	for token, expiry := range revokedSessionTokens.tokens {
+		if !expiry.IsZero() && now.After(expiry) {
+			delete(revokedSessionTokens.tokens, token)
+		}
+	}
 }
 
 // TokenClaims claims struct for decrypted credentials
@@ -106,6 +162,9 @@ type SessionFeatures struct {
 func SessionTokenAuthenticate(token string) (*TokenClaims, error) {
 	if token == "" {
 		return nil, ErrNoAuthToken
+	}
+	if IsSessionTokenRevoked(token) {
+		return nil, ErrTokenRevoked
 	}
 	decryptedToken, err := DecryptToken(token)
 	if err != nil {
@@ -335,7 +394,11 @@ func GetTokenFromRequest(r *http.Request) (string, error) {
 	if !tokenCookie.Expires.IsZero() && tokenCookie.Expires.Before(currentTime) {
 		return "", ErrTokenExpired
 	}
-	return strings.TrimSpace(tokenCookie.Value), nil
+	tokenValue := strings.TrimSpace(tokenCookie.Value)
+	if IsSessionTokenRevoked(tokenValue) {
+		return "", ErrTokenRevoked
+	}
+	return tokenValue, nil
 }
 
 func GetClaimsFromTokenInRequest(req *http.Request) (*models.Principal, error) {

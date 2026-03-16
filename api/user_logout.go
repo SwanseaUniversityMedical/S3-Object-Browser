@@ -30,6 +30,7 @@ import (
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
 	authApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	authpkg "github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/idp/oauth2"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
@@ -75,6 +76,9 @@ func logout(credentials ConsoleCredentialsI) {
 func getLogoutResponse(session *models.Principal, params authApi.LogoutParams) *CodedAPIError {
 	ctx, cancel := context.WithCancel(params.HTTPRequest.Context())
 	defer cancel()
+	if sessionToken, err := authpkg.GetTokenFromRequest(params.HTTPRequest); err == nil {
+		authpkg.RevokeSessionToken(sessionToken)
+	}
 	state := params.Body.State
 	if state != "" {
 		if err := logoutFromIDPProvider(params.HTTPRequest, state); err != nil {

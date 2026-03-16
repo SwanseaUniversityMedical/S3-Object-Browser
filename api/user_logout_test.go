@@ -16,7 +16,15 @@
 
 package api
 
-import "testing"
+import (
+	"net/http/httptest"
+	"testing"
+
+	authApi "github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations/auth"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
+	"github.com/stretchr/testify/assert"
+)
 
 // mock function of Get()
 func (ac consoleCredentialsMock) Expire() {
@@ -26,4 +34,37 @@ func (ac consoleCredentialsMock) Expire() {
 
 func TestLogout(_ *testing.T) {
 	// There's nothing to test right now
+}
+
+func TestGetLogoutResponseRevokesSessionToken(t *testing.T) {
+	creds := &auth.CredentialsValue{
+		AccessKeyID:     "test-access-key",
+		SecretAccessKey: "test-secret-key",
+		SessionToken:    "test-session-token",
+	}
+
+	sessionToken, err := auth.NewEncryptedTokenForClient(creds, "test-account", nil)
+	assert.NoError(t, err)
+
+	req := httptest.NewRequest("POST", "/api/v1/logout", nil)
+	cookie := NewSessionCookieForConsole(sessionToken)
+	req.AddCookie(&cookie)
+
+	params := authApi.LogoutParams{
+		HTTPRequest: req,
+		Body:        &models.LogoutRequest{},
+	}
+	session := &models.Principal{
+		STSAccessKeyID:     creds.AccessKeyID,
+		STSSecretAccessKey: creds.SecretAccessKey,
+		STSSessionToken:    creds.SessionToken,
+		AccountAccessKey:   "test-account",
+	}
+
+	logoutErr := getLogoutResponse(session, params)
+	assert.Nil(t, logoutErr)
+	assert.True(t, auth.IsSessionTokenRevoked(sessionToken))
+	principal, claimErr := auth.GetClaimsFromTokenInRequest(req)
+	assert.Nil(t, principal)
+	assert.ErrorIs(t, claimErr, auth.ErrTokenRevoked)
 }

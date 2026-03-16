@@ -18,6 +18,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"reflect"
 	"testing"
@@ -130,4 +131,24 @@ func Test_getListOfEnabledFeatures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildSessionPermissions(t *testing.T) {
+	t.Run("scopes restricted sessions to allowed buckets", func(t *testing.T) {
+		allowedBuckets, err := json.Marshal([]string{"bucket-a", "bucket-b"})
+		assert.NoError(t, err)
+
+		permissions := buildSessionPermissions(&models.Principal{AllowedBuckets: string(allowedBuckets)})
+
+		assert.NotContains(t, permissions, "arn:aws:s3:::*")
+		assert.Equal(t, []string{"s3:*"}, permissions["arn:aws:s3:::bucket-a"])
+		assert.Equal(t, []string{"s3:*"}, permissions["arn:aws:s3:::bucket-a/*"])
+		assert.Equal(t, []string{"s3:*"}, permissions["arn:aws:s3:::bucket-b"])
+		assert.Equal(t, []string{"s3:*"}, permissions["arn:aws:s3:::bucket-b/*"])
+	})
+
+	t.Run("keeps wildcard access for unrestricted sessions", func(t *testing.T) {
+		permissions := buildSessionPermissions(&models.Principal{})
+		assert.Equal(t, []string{"s3:*"}, permissions["arn:aws:s3:::*"])
+	})
 }

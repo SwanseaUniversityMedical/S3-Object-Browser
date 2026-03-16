@@ -78,3 +78,16 @@ func TestSessionTokenValid(t *testing.T) {
 	// Test-2 : SessionTokenAuthenticate() provided token is invalid
 	funcAssert.Equal(false, IsSessionTokenValid(badToken))
 }
+
+func TestRevokedSessionTokenIsRejected(t *testing.T) {
+	token, err := NewEncryptedTokenForClient(creds, "", nil)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, token)
+
+	RevokeSessionToken(token)
+
+	claims, err := SessionTokenAuthenticate(token)
+	assert.Nil(t, claims)
+	assert.ErrorIs(t, err, ErrTokenRevoked)
+	assert.False(t, IsSessionTokenValid(token))
+}

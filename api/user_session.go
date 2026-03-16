@@ -18,6 +18,8 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 
 	jwtgo "github.com/golang-jwt/jwt/v4"
 
@@ -65,17 +67,9 @@ func getSessionResponse(ctx context.Context, session *models.Principal) (*models
 
 	// Simplified session response for pure S3 mode
 	// Pure S3 doesn't have MinIO admin APIs or IAM policy management
-	// All users get full S3 permissions by default
 	customStyles := session.CustomStyleOb
 
-	// Grant all S3 actions in S3 ARN format for frontend permission checks
-	// Frontend expects permissions keyed by S3 ARN (e.g., "arn:aws:s3:::*" for all buckets)
-	resourcePermissions := map[string][]string{
-		// Wildcard for all buckets - administrator access
-		"arn:aws:s3:::*": {
-			"s3:*",
-		},
-	}
+	resourcePermissions := buildSessionPermissions(session)
 
 	var allowResources []*models.PermissionResource
 
@@ -111,4 +105,33 @@ func getListOfEnabledFeatures(session *models.Principal) []string {
 	}
 
 	return features
+}
+
+func buildSessionPermissions(session *models.Principal) map[string][]string {
+	if session == nil || strings.TrimSpace(session.AllowedBuckets) == "" {
+		return map[string][]string{
+			"arn:aws:s3:::*": {
+				"s3:*",
+			},
+		}
+	}
+
+	var bucketList []string
+	if err := json.Unmarshal([]byte(session.AllowedBuckets), &bucketList); err != nil {
+		return map[string][]string{}
+	}
+
+	permissions := map[string][]string{}
+	for _, bucketName := range UniqueKeys(bucketList) {
+		bucketName = strings.TrimSpace(bucketName)
+		if bucketName == "" {
+			continue
+		}
+
+		bucketArn := "arn:aws:s3:::" + bucketName
+		permissions[bucketArn] = []string{"s3:*"}
+		permissions[bucketArn+"/*"] = []string{"s3:*"}
+	}
+
+	return permissions
 }
