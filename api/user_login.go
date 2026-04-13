@@ -84,8 +84,9 @@ type TenantContext struct {
 
 // EnforceTenantIsolation ensures that API requests are scoped to the tenant
 func EnforceTenantIsolation(ctx context.Context, tenantID string) error {
-	// Example: Check if the tenantID matches the session's tenant context
-	sessionTenant := ctx.Value("tenant_id").(string)
+	// Use fmt.Sprintf to extract the value regardless of the concrete type
+	// (TenantIsolationMiddleware stores a named tenants.TenantID, not a plain string).
+	sessionTenant := fmt.Sprintf("%v", ctx.Value("tenant_id"))
 	if sessionTenant != tenantID {
 		return fmt.Errorf("access denied: tenant isolation enforced")
 	}
@@ -230,7 +231,14 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 		return nil, fmt.Errorf("S3 credentials not configured")
 	}
 
-	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Creating session for OIDC user %s from tenant: %s", idClaims["preferred_username"], tenantID))
+	// Extract Keycloak user identity from the ID token.
+	// These are the authoritative identity fields for audit logging — they come from the IdP,
+	// not from S3 credentials, so they will never be "minioadmin" or any other service account.
+	subject, _ := idClaims["sub"].(string)
+	email, _ := idClaims["email"].(string)
+	username, _ := idClaims["preferred_username"].(string)
+
+	logger.LogIf(context.Background(), fmt.Errorf("DEBUG: Creating session for OIDC user sub=%s username=%s from tenant: %s", subject, username, tenantID))
 
 	// Create JWT token with S3 credentials and tenant context
 	credsValue := &auth.CredentialsValue{
@@ -242,9 +250,13 @@ func AuthenticateWithKeycloak(authCode string) (*models.LoginResponse, error) {
 	sessionFeatures := &auth.SessionFeatures{
 		TenantID:       tenantID,
 		AllowedBuckets: allowedBuckets,
+		Subject:        subject,
+		Email:          email,
+		Username:       username,
 	}
 
-	token, err := auth.NewEncryptedTokenForClient(credsValue, accessKey, sessionFeatures)
+	// Pass an empty accountAccessKey — the S3 service account name is not a user identifier.
+	token, err := auth.NewEncryptedTokenForClient(credsValue, "", sessionFeatures)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session token: %w", err)
 	}

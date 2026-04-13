@@ -357,8 +357,20 @@ func AuthenticationMiddleware(next http.Handler) http.Handler {
 		ctx := r.Context()
 		claims, _ := auth.ParseClaimsFromToken(string(sessionToken))
 		if claims != nil {
-			// save user session id context
-			ctx = context.WithValue(r.Context(), utils.ContextRequestUserID, claims.STSSessionToken)
+			// Save session and identity information for downstream audit middleware.
+			// Priority: Keycloak subject (stable IdP UUID) > STS access key.
+			// AccountAccessKey is the S3 service account name (e.g. "minioadmin");
+			// it MUST NOT be used as a user identity.
+			userID := claims.Subject
+			if userID == "" {
+				userID = claims.STSAccessKeyID
+			}
+			ctx = context.WithValue(ctx, utils.ContextRequestUserID, userID)
+			ctx = context.WithValue(ctx, "session_claims", claims)
+			// NOTE: Do NOT write "tenant_id" here. TenantIsolationMiddleware (which runs before
+			// this middleware in the request chain) stores the tenant as the typed tenants.TenantID.
+			// Writing a plain string here would shadow that value and break GetTenantFromContext's
+			// type assertion, causing "tenant context not found" on every request.
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

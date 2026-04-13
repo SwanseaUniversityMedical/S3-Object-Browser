@@ -52,6 +52,8 @@ require (
 	github.com/minio/pkg/v3 v3.1.2
 )
 
+require github.com/lib/pq v1.10.9
+
 require (
 	aead.dev/mem v0.2.0 // indirect
 	aead.dev/minisign v0.3.0 // indirect

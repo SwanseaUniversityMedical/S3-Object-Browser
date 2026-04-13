@@ -993,6 +993,7 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 	totalFiles := 0
 	successfulFiles := 0
 	var uploadErrors []string
+	uploadedObjectKeys := make([]string, 0)
 
 	for {
 		p, err := mr.NextPart()
@@ -1064,6 +1065,17 @@ func uploadFiles(ctx context.Context, client S3Client, params objectApi.PostBuck
 			continue
 		}
 		successfulFiles++
+		uploadedObjectKeys = append(uploadedObjectKeys, objectName)
+	}
+
+	if len(uploadedObjectKeys) > 0 && params.HTTPRequest != nil && params.HTTPRequest.URL != nil {
+		q := params.HTTPRequest.URL.Query()
+		if len(uploadedObjectKeys) == 1 {
+			q.Set("object", uploadedObjectKeys[0])
+		} else {
+			q.Set("object", strings.Join(uploadedObjectKeys, ","))
+		}
+		params.HTTPRequest.URL.RawQuery = q.Encode()
 	}
 
 	// Log bulk upload summary

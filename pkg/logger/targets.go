@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/target/http"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/target/postgres"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/target/types"
 )
 
@@ -145,6 +146,29 @@ func UpdateAuditWebhookTargets(cfg Config) error {
 	swapMu.Lock()
 	atomic.StoreInt32(&nAuditTargets, int32(len(updated)))
 	cancelAuditTargetType(types.TargetHTTP) // cancel running targets
+	auditTargets = updated
+	swapMu.Unlock()
+	return nil
+}
+
+// AddAuditPostgresTarget initialises and registers a PostgreSQL audit target.
+// Any existing PostgreSQL target is cancelled and replaced.
+func AddAuditPostgresTarget(cfg postgres.Config) error {
+	t := postgres.New(cfg)
+	if err := t.Init(); err != nil {
+		return err
+	}
+
+	swapMu.Lock()
+	cancelAuditTargetType(types.TargetPostgres)
+	updated := make([]Target, 0, len(auditTargets)+1)
+	for _, tgt := range auditTargets {
+		if tgt.Type() != types.TargetPostgres {
+			updated = append(updated, tgt)
+		}
+	}
+	updated = append(updated, t)
+	atomic.StoreInt32(&nAuditTargets, int32(len(updated)))
 	auditTargets = updated
 	swapMu.Unlock()
 	return nil

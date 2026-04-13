@@ -29,6 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
 	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/message/audit"
@@ -227,7 +228,54 @@ func AuditLog(ctx context.Context, w *ResponseWriter, r *http.Request, reqClaims
 		entry.RequestID = reqInfo.RequestID
 
 		entry.API.TimeToResponse = strconv.FormatInt(timeToResponse.Nanoseconds(), 10) + "ns"
-		entry.Tags = reqInfo.GetTagsMap()
+		for k, v := range reqInfo.GetTagsMap() {
+			entry.Tags[k] = v
+		}
+		if _, ok := entry.Tags["rgw_request_id"]; !ok {
+			if rgwReqID, ok := entry.RespHeader["X-Amz-Request-Id"]; ok && rgwReqID != "" {
+				entry.Tags["rgw_request_id"] = rgwReqID
+			}
+		}
+		if _, ok := entry.Tags["tenant_id"]; !ok {
+			// TenantIsolationMiddleware stores the tenant as tenants.TenantID (a named string type),
+			// not a plain string. Use fmt.Sprintf to extract the value regardless of the concrete type.
+			if tenantVal := ctx.Value("tenant_id"); tenantVal != nil {
+				if s := fmt.Sprintf("%v", tenantVal); s != "" {
+					entry.Tags["tenant_id"] = s
+				}
+			}
+		}
+		if claims, ok := ctx.Value("session_claims").(*auth.TokenClaims); ok && claims != nil {
+			if _, ok := entry.Tags["tenant_id"]; !ok && claims.TenantID != "" {
+				entry.Tags["tenant_id"] = claims.TenantID
+			}
+			// user_id: prefer the Keycloak subject (stable UUID from IdP) over S3 credentials.
+			// AccountAccessKey is a service account name and must never identify a real user.
+			if _, ok := entry.Tags["user_id"]; !ok {
+				if claims.Subject != "" {
+					entry.Tags["user_id"] = claims.Subject
+				} else if claims.STSAccessKeyID != "" {
+					entry.Tags["user_id"] = claims.STSAccessKeyID
+				}
+			}
+			// user_email: populated from Keycloak claims; never fall back to S3 credentials.
+			if _, ok := entry.Tags["user_email"]; !ok {
+				if claims.Email != "" {
+					entry.Tags["user_email"] = claims.Email
+				} else if claims.Username != "" {
+					entry.Tags["user_email"] = claims.Username
+				}
+			}
+			if _, ok := entry.Tags["session_id"]; !ok && claims.STSSessionToken != "" {
+				entry.Tags["session_id"] = claims.STSSessionToken
+			}
+		}
+		if _, ok := entry.Tags["session_id"]; !ok && entry.SessionID != "" {
+			entry.Tags["session_id"] = entry.SessionID
+		}
+		if _, ok := entry.Tags["user_id"]; !ok && entry.SessionID != "" {
+			entry.Tags["user_id"] = entry.SessionID
+		}
 		// ttfb will be recorded only for GET requests, Ignore such cases where ttfb will be empty.
 		if timeToFirstByte != 0 {
 			entry.API.TimeToFirstByte = strconv.FormatInt(timeToFirstByte.Nanoseconds(), 10) + "ns"
@@ -244,7 +292,7 @@ func AuditLog(ctx context.Context, w *ResponseWriter, r *http.Request, reqClaims
 		entry.RemoteHost = hashString(entry.RemoteHost)
 	}
 
-	// Send audit logs only to http targets.
+	// Send audit logs to all configured audit targets.
 	for _, t := range AuditTargets() {
 		if err := t.Send(entry, string(All)); err != nil {
 			LogAlwaysIf(context.Background(), fmt.Errorf("event(%v) was not sent to Audit target (%v): %v", entry, t, err), All)

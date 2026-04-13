@@ -24,4 +24,5 @@ const (
 	_ TargetType = iota
 	TargetConsole
 	TargetHTTP
+	TargetPostgres
 )

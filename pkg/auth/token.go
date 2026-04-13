@@ -132,6 +132,10 @@ type TokenClaims struct {
 	CustomStyleOB      string   `json:"customStyleOb,omitempty"`
 	TenantID           string   `json:"tenantId,omitempty"`
 	AllowedBuckets     []string `json:"buckets,omitempty"`
+	// Keycloak / OIDC identity fields — always populated from the IdP, never from S3 credentials
+	Subject  string `json:"subject,omitempty"`  // Keycloak "sub" claim — stable UUID for the user
+	Email    string `json:"email,omitempty"`    // Keycloak "email" claim
+	Username string `json:"username,omitempty"` // Keycloak "preferred_username" claim
 }
 
 // STSClaims claims struct for STS Token
@@ -146,6 +150,10 @@ type SessionFeatures struct {
 	CustomStyleOB  string
 	TenantID       string
 	AllowedBuckets []string
+	// Keycloak / OIDC identity — populated at login time from the IdP token
+	Subject  string // Keycloak "sub" claim
+	Email    string // Keycloak "email" claim
+	Username string // Keycloak "preferred_username" claim
 }
 
 // SessionTokenAuthenticate takes a session token, decode it, extract claims and validate the signature
@@ -196,6 +204,9 @@ func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey 
 			tokenClaims.CustomStyleOB = features.CustomStyleOB
 			tokenClaims.TenantID = features.TenantID
 			tokenClaims.AllowedBuckets = features.AllowedBuckets
+			tokenClaims.Subject = features.Subject
+			tokenClaims.Email = features.Email
+			tokenClaims.Username = features.Username
 		}
 
 		encryptedClaims, err := encryptClaims(tokenClaims)
