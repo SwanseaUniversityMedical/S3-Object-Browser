@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2023 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -195,8 +195,8 @@ const HelpMenu = () => {
       <div style={{ padding: 16 }}>
         <MoreLink
           LeadingIcon={MinIOTierIcon}
-          text={"Visit MinIO Documentation"}
-          link={"https://docs.min.io/?ref=con"}
+          text={"Visit S3 Documentation"}
+          link={"https://docs.aws.amazon.com/AmazonS3/latest/userguide/"}
           color={"#C5293F"}
         />
       </div>
@@ -221,8 +221,8 @@ const HelpMenu = () => {
       <div style={{ padding: 16 }}>
         <MoreLink
           LeadingIcon={MinIOTierIcon}
-          text={"Visit MinIO Videos"}
-          link={"https://resources.min.io/l/library?contentType=video"}
+          text={"Visit S3 Videos"}
+          link={"https://aws.amazon.com/s3/resources/"}
           color={"#C5293F"}
         />
       </div>
@@ -247,8 +247,8 @@ const HelpMenu = () => {
       <div style={{ padding: 16 }}>
         <MoreLink
           LeadingIcon={MinIOTierIcon}
-          text={"Visit MinIO Blog"}
-          link={"https://blog.min.io/?ref=con"}
+          text={"Visit Storage Blog"}
+          link={"https://aws.amazon.com/blogs/storage/"}
           color={"#C5293F"}
         />
       </div>

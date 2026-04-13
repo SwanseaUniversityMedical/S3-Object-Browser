@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2022 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -135,13 +135,13 @@ export const LICENSE_PLANS_INFORMATION: LicensePlanOption[] = [
     planName: "Enterprise",
     planType: "commercial",
     planIcon: (
-      <ApplicationLogo applicationName={"aistor"} subVariant={"enterprise"} />
+      <ApplicationLogo applicationName={"aistor" as any} subVariant={"enterprise"} />
     ),
     planDescription: "",
   },
 ];
 
-const LICENSE_CONSENT_STORE_KEY = "agpl_minio_license_consent";
+const LICENSE_CONSENT_STORE_KEY = "agpl_object_browser_license_consent";
 export const setLicenseConsent = () => {
   localStorage.setItem(LICENSE_CONSENT_STORE_KEY, "true");
 };

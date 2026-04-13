@@ -40,13 +40,19 @@ export const niceBytesInt = (n: number, showK8sUnits: boolean = false) => {
 };
 
 const deleteCookie = (name: string) => {
-  document.cookie = name + "=; expires=Thu, 01 Jan 1970 00:00:01 GMT;";
+  document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:01 GMT; Max-Age=0; path=/;`;
 };
 
 export const clearSession = () => {
   storage.removeItem("token");
   storage.removeItem("auth-state");
+  localStorage.removeItem("userLoggedIn");
+  localStorage.removeItem("redirect-path");
+  sessionStorage.removeItem("oauth_state");
+  sessionStorage.removeItem("oauth_nonce");
+  sessionStorage.removeItem("oauth_idp_url");
   deleteCookie("token");
+  deleteCookie("sessionToken");
   deleteCookie("idp-refresh-token");
 };
 

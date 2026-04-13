@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -24,6 +24,7 @@ import { useSelector } from "react-redux";
 import { getFetchConfigurationAsync } from "./loginThunks";
 import { resetForm } from "./loginSlice";
 import StrategyForm from "./StrategyForm";
+import KeycloakLogin from "./KeycloakLogin";
 import { getLogoApplicationVariant, getLogoVar } from "../../config";
 import { RedirectRule } from "api/consoleApi";
 import { redirectRules } from "./login.utils";
@@ -74,16 +75,8 @@ const Login = () => {
 
   switch (loginStrategy.loginStrategy) {
     case loginStrategyType.form: {
-      let redirectItems: RedirectRule[] = [];
-
-      if (
-        loginStrategy.redirectRules &&
-        loginStrategy.redirectRules.length > 0
-      ) {
-        redirectItems = [...loginStrategy.redirectRules].sort(redirectRules);
-      }
-
-      loginComponent = <StrategyForm redirectRules={redirectItems} />;
+      // Use Keycloak OAuth flow - no credentials stored in browser
+      loginComponent = <KeycloakLogin />;
       break;
     }
     default:
@@ -132,7 +125,7 @@ const Login = () => {
   }
 
   let docsURL =
-    "https://docs.min.io/community/minio-object-store/index.html?ref=con";
+    "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html";
 
   useEffect(() => {
     dispatch(setHelpName("login"));
@@ -161,16 +154,12 @@ const Login = () => {
               Documentation
             </a>
             <span className={"separator"}>|</span>
-            <a
-              href="https://github.com/minio/minio"
-              target="_blank"
-              rel="noopener"
-            >
+            <a href="https://github.com" target="_blank" rel="noopener">
               GitHub
             </a>
             <span className={"separator"}>|</span>
             <a
-              href="https://subnet.min.io/?ref=con"
+              href="https://aws.amazon.com/support/"
               target="_blank"
               rel="noopener"
             >
@@ -178,7 +167,7 @@ const Login = () => {
             </a>
             <span className={"separator"}>|</span>
             <a
-              href="https://min.io/download/?ref=con"
+              href="https://aws.amazon.com/s3/"
               target="_blank"
               rel="noopener"
             >
@@ -191,13 +180,15 @@ const Login = () => {
         }
         promoInfo={
           <span style={{ fontSize: 14, lineHeight: 1 }}>
-            MinIO is a cloud-native object store built to run on any
-            infrastructure - public, private or edge clouds. Primary use cases
-            include data lakes, databases, AI/ML, SaaS applications and fast
-            backup & recovery. MinIO is dual licensed under GNU AGPL v3 and
-            commercial license. To learn more, visit{" "}
-            <a href={"https://min.io/?ref=con"} target="_blank" rel="noopener">
-              www.min.io
+            This object browser connects to S3-compatible storage. Common use
+            cases include data lakes, analytics, backups, and application data
+            storage. Learn more at{" "}
+            <a
+              href={"https://aws.amazon.com/s3/"}
+              target="_blank"
+              rel="noopener"
+            >
+              aws.amazon.com/s3
             </a>
             .
           </span>

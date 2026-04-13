@@ -19,7 +19,7 @@ package logger
 import (
 	"context"
 
-	"github.com/minio/console/pkg/logger/target/http"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/target/http"
 )
 
 // Audit/Logger constants
@@ -42,6 +42,11 @@ const (
 	EnvAuditWebhookClientCert = "CONSOLE_AUDIT_WEBHOOK_CLIENT_CERT"
 	EnvAuditWebhookClientKey  = "CONSOLE_AUDIT_WEBHOOK_CLIENT_KEY"
 	EnvAuditWebhookQueueSize  = "CONSOLE_AUDIT_WEBHOOK_QUEUE_SIZE"
+
+	// PostgreSQL audit persistence
+	EnvAuditPersistenceEnabled   = "CONSOLE_AUDIT_PERSISTENCE_ENABLED"
+	EnvAuditPersistenceURL       = "CONSOLE_AUDIT_PERSISTENCE_URL"
+	EnvAuditPersistenceQueueSize = "CONSOLE_AUDIT_PERSISTENCE_QUEUE_SIZE"
 )
 
 // Config console and http logger targets

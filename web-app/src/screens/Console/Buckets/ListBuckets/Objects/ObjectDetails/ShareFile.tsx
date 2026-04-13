@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -41,6 +41,8 @@ import { errorToHandler } from "api/errors";
 import { getMaxShareLinkExpTime } from "screens/Console/ObjectBrowser/objectBrowserThunks";
 import { maxShareLinkExpTime } from "screens/Console/ObjectBrowser/objectBrowserSlice";
 import debounce from "lodash/debounce";
+
+const CopyToClipboardComponent = CopyToClipboard as any;
 
 interface IShareFileProps {
   open: boolean;
@@ -228,7 +230,7 @@ const ShareFile = ({
             >
               <ReadBox
                 actionButton={
-                  <CopyToClipboard text={shareURL}>
+                  <CopyToClipboardComponent text={shareURL}>
                     <Button
                       id={"copy-path"}
                       variant="regular"
@@ -245,7 +247,7 @@ const ShareFile = ({
                       }}
                       icon={<CopyIcon />}
                     />
-                  </CopyToClipboard>
+                  </CopyToClipboardComponent>
                 }
               >
                 {shareURL}

@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -22,12 +22,14 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -39,22 +41,22 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/minio/console/pkg/logger"
-	"github.com/minio/console/pkg/utils"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/s3client"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/utils"
 
 	"github.com/klauspost/compress/gzhttp"
 
-	portal_ui "github.com/minio/console/web-app"
+	portal_ui "github.com/SwanseaUniversityMedical/S3-Object-Browser/web-app"
 	"github.com/minio/pkg/v3/env"
 	"github.com/minio/pkg/v3/mimedb"
 	xnet "github.com/minio/pkg/v3/net"
 
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/api/operations"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth"
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/swag"
-	"github.com/minio/console/api/operations"
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth"
 	"github.com/unrolled/secure"
 )
 
@@ -87,13 +89,17 @@ func configureAPI(api *operations.ConsoleAPI) http.Handler {
 	api.KeyAuth = func(token string, _ []string) (*models.Principal, error) {
 		// we are validating the session token by decrypting the claims inside, if the operation succeed that means the jwt
 		// was generated and signed by us in the first place
-		if token == "Anonymous" {
-			return &models.Principal{}, nil
-		}
+		// No anonymous access - authentication is required
 		claims, err := auth.ParseClaimsFromToken(token)
 		if err != nil {
 			api.Logger("Unable to validate the session token %s: %v", token, err)
 			return nil, errors.New(401, "incorrect api key auth")
+		}
+		var allowedBucketsJSON string
+		if len(claims.AllowedBuckets) > 0 {
+			if bucketData, marshalErr := json.Marshal(claims.AllowedBuckets); marshalErr == nil {
+				allowedBucketsJSON = string(bucketData)
+			}
 		}
 		return &models.Principal{
 			STSAccessKeyID:     claims.STSAccessKeyID,
@@ -103,10 +109,13 @@ func configureAPI(api *operations.ConsoleAPI) http.Handler {
 			Hm:                 claims.HideMenu,
 			Ob:                 claims.ObjectBrowser,
 			CustomStyleOb:      claims.CustomStyleOB,
+			TenantID:           claims.TenantID,
+			AllowedBuckets:     allowedBucketsJSON,
 		}, nil
 	}
 	api.AnonymousAuth = func(_ string) (*models.Principal, error) {
-		return &models.Principal{}, nil
+		// Anonymous access disabled - authentication required
+		return nil, errors.New(401, "authentication required")
 	}
 
 	// Register login handlers
@@ -268,6 +277,8 @@ func setupGlobalMiddleware(handler http.Handler) http.Handler {
 	next = ContextMiddleware(next)
 	// handle cookie or authorization header for session
 	next = AuthenticationMiddleware(next)
+	// enforce server-side tenant isolation based on session claims
+	next = TenantIsolationMiddleware(next)
 	// handle debug logging
 	next = DebugLogMiddleware(next)
 
@@ -346,8 +357,20 @@ func AuthenticationMiddleware(next http.Handler) http.Handler {
 		ctx := r.Context()
 		claims, _ := auth.ParseClaimsFromToken(string(sessionToken))
 		if claims != nil {
-			// save user session id context
-			ctx = context.WithValue(r.Context(), utils.ContextRequestUserID, claims.STSSessionToken)
+			// Save session and identity information for downstream audit middleware.
+			// Priority: Keycloak subject (stable IdP UUID) > STS access key.
+			// AccountAccessKey is the S3 service account name (e.g. "minioadmin");
+			// it MUST NOT be used as a user identity.
+			userID := claims.Subject
+			if userID == "" {
+				userID = claims.STSAccessKeyID
+			}
+			ctx = context.WithValue(ctx, utils.ContextRequestUserID, userID)
+			ctx = context.WithValue(ctx, "session_claims", claims)
+			// NOTE: Do NOT write "tenant_id" here. TenantIsolationMiddleware (which runs before
+			// this middleware in the request chain) stores the tenant as the typed tenants.TenantID.
+			// Writing a plain string here would shadow that value and break GetTenantFromContext's
+			// type assertion, causing "tenant context not found" on every request.
 		}
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -366,6 +389,12 @@ func FileServerMiddleware(next http.Handler) http.Handler {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/ws"):
 			serveWS(w, r)
+		case r.URL.Path == "/api/v1/oauth/config":
+			// OAuth configuration endpoint
+			OAuthConfigHandler(w, r)
+		case r.URL.Path == "/api/v1/oauth/callback":
+			// OAuth callback endpoint
+			OAuthCallbackHandler(w, r)
 		case strings.HasPrefix(r.URL.Path, "/api"):
 			next.ServeHTTP(w, r)
 		default:
@@ -395,6 +424,51 @@ func (w *notFoundRedirectRespWr) Write(p []byte) (int, error) {
 
 // handleSPA handles the serving of the React Single Page Application
 func handleSPA(w http.ResponseWriter, r *http.Request) {
+	// Check if this is a protected route (not login, logout, or oauth_callback)
+	path := r.URL.Path
+	isPublicRoute := path == "/login" || path == "/logout" || path == "/oauth_callback"
+
+	fmt.Printf("DEBUG handleSPA: path=%s, isPublicRoute=%v\n", path, isPublicRoute)
+
+	// For protected routes, verify authentication before serving the SPA
+	if !isPublicRoute {
+		// Check for valid session token
+		token, err := auth.GetTokenFromRequest(r)
+		fmt.Printf("DEBUG auth check: token=%q, err=%v\n", token, err)
+
+		if err == nil {
+			sessionToken, _ := auth.DecryptToken(token)
+			fmt.Printf("DEBUG after decrypt: sessionToken length=%d\n", len(sessionToken))
+
+			if len(sessionToken) > 0 {
+				// Validate the token
+				_, err := auth.ParseClaimsFromToken(string(sessionToken))
+				if err != nil {
+					// Invalid token - redirect to login
+					fmt.Printf("DEBUG: Invalid token, redirecting to login\n")
+					http.Redirect(w, r, "/login", http.StatusFound)
+					return
+				}
+				// Token is valid, continue serving the SPA
+				fmt.Printf("DEBUG: Token valid, serving SPA\n")
+			} else {
+				// No valid session token - redirect to login
+				fmt.Printf("DEBUG: Empty session token, redirecting to login\n")
+				http.Redirect(w, r, "/login", http.StatusFound)
+				return
+			}
+		} else if err == auth.ErrNoAuthToken || err == auth.ErrTokenExpired || err == auth.ErrTokenRevoked {
+			// No auth token at all - redirect to login
+			fmt.Printf("DEBUG: No auth token, redirecting to login\n")
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		} else {
+			fmt.Printf("DEBUG: Invalid auth state (%v), redirecting to login\n", err)
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+	}
+
 	basePath := "/"
 	// For SPA mode we will replace root base with a sub path if configured unless we received cp=y and cpb=/NEW/BASE
 	if v := r.URL.Query().Get("cp"); v == "y" {
@@ -420,10 +494,19 @@ func handleSPA(w http.ResponseWriter, r *http.Request) {
 
 	// if these three parameters are present we are being asked to issue a session with these values
 	if sts != "" && stsAccessKey != "" && stsSecretKey != "" {
-		creds := credentials.NewStaticV4(stsAccessKey, stsSecretKey, sts)
-		consoleCreds := &ConsoleCredentials{
-			ConsoleCredentials: creds,
-			AccountAccessKey:   stsAccessKey,
+		// Get S3 endpoint and region from environment or use defaults
+		endpoint := os.Getenv("S3_ENDPOINT")
+		region := os.Getenv("S3_REGION")
+		if region == "" {
+			region = "us-east-1"
+		}
+
+		consoleCreds := &s3client.S3Credentials{
+			AccessKey:    stsAccessKey,
+			SecretKey:    stsSecretKey,
+			SessionToken: sts,
+			Region:       region,
+			Endpoint:     endpoint,
 		}
 		sf := &auth.SessionFeatures{}
 		sf.HideMenu = true

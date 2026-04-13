@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2023 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -26,7 +26,6 @@ import { SessionCallStates } from "../Console/consoleSlice.types";
 
 import {
   globalSetDistributedSetup,
-  setAnonymousMode,
   setOverrideStyles,
   userLogged,
 } from "../../../src/systemSlice";
@@ -58,34 +57,9 @@ export const fetchSession = createAsyncThunk(
         }
       })
       .catch(async (res) => {
-        if (screen === "browser") {
-          const bucket = pathnameParts.length >= 3 ? pathnameParts[2] : "";
-          // no bucket, no business
-          if (bucket === "") {
-            return;
-          }
-          // before marking the session as done, let's check if the bucket is publicly accessible (anonymous)
-          api.buckets
-            .listObjects(
-              bucket,
-              { limit: 1 },
-              { headers: { "X-Anonymous": "1" } },
-            )
-            .then(() => {
-              dispatch(setAnonymousMode());
-            })
-            .catch((res) => {
-              dispatch(setErrorSnackMessage(errorToHandler(res.error)));
-            })
-            .finally(() => {
-              // TODO: we probably need a thunk for this api since setting the state here is hacky,
-              // we can use a state to let the ProtectedRoutes know when to render the elements
-              dispatch(setSessionLoadingState(SessionCallStates.Done));
-            });
-        } else {
-          dispatch(setSessionLoadingState(SessionCallStates.Done));
-          dispatch(setErrorSnackMessage(errorToHandler(res.error)));
-        }
+        // Always require authentication - no anonymous access allowed
+        dispatch(setSessionLoadingState(SessionCallStates.Done));
+        dispatch(setErrorSnackMessage(errorToHandler(res.error)));
         return rejectWithValue(res.error);
       });
   },

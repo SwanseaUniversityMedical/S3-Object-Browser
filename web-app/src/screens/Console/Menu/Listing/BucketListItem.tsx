@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -16,7 +16,7 @@
 
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { BucketsIcon, MenuItem } from "mds";
+import { Box, BucketsIcon } from "mds";
 import { Bucket } from "../../../../api/consoleApi";
 
 interface IBucketListItem {
@@ -27,12 +27,40 @@ const BucketListItem = ({ bucket }: IBucketListItem) => {
   const navigate = useNavigate();
 
   return (
-    <MenuItem
-      name={bucket.name}
-      icon={<BucketsIcon />}
+    <Box
       onClick={() => navigate(`/browser/${bucket.name}`)}
       id={`manageBucket-${bucket.name}`}
-    />
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        padding: "8px 12px",
+        cursor: "pointer",
+        borderRadius: 1,
+        width: "100%",
+        color: "#fff",
+        "& svg": {
+          fill: "#fff",
+        },
+        "&:hover": {
+          backgroundColor: "rgba(255, 255, 255, 0.15)",
+        },
+      }}
+    >
+      <BucketsIcon />
+      <Box
+        sx={{
+          textAlign: "left",
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          flexGrow: 1,
+          color: "#fff",
+        }}
+      >
+        {bucket.name}
+      </Box>
+    </Box>
   );
 };
 

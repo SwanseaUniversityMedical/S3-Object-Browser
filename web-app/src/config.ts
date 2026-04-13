@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2023 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -16,10 +16,10 @@
 
 import { ApplicationLogoProps } from "mds";
 
-const MinIOPlan =
+const ObjectBrowserPlan =
   (
     document.head.querySelector(
-      "[name~=minio-license][content]",
+      "[name~=object-browser-license][content]",
     ) as HTMLMetaElement
   )?.content || "AGPL";
 
@@ -35,7 +35,7 @@ type LogoVar =
 
 export const getLogoVar = (): LogoVar => {
   let logoVar: LogoVar = "AGPL";
-  switch (MinIOPlan.toLowerCase()) {
+  switch (ObjectBrowserPlan.toLowerCase()) {
     case "enterprise-lite":
       logoVar = "enterpriseos";
       break;
@@ -57,10 +57,10 @@ export const getLogoVar = (): LogoVar => {
 
 export const getLogoApplicationVariant =
   (): ApplicationLogoProps["applicationName"] => {
-    switch (MinIOPlan.toLowerCase()) {
+    switch (ObjectBrowserPlan.toLowerCase()) {
       case "enterprise-lite":
       case "enterprise-plus":
-        return "minio";
+        return "object-browser" as any;
       default:
         return "console";
     }

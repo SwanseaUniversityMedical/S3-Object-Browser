@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2023 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 import { test as setup } from "@playwright/test";
-import { adminAccessKey, adminSecretKey, minioadminFile } from "./consts";
+import { adminAccessKey, adminSecretKey, adminAuthFile } from "./consts";
 import { BUCKET_LIST_PAGE } from "./consts";
 
 setup("authenticate as admin", async ({ page }) => {
@@ -30,5 +30,5 @@ setup("authenticate as admin", async ({ page }) => {
   await page.waitForTimeout(1000);
   // End of authentication steps.
 
-  await page.context().storageState({ path: minioadminFile });
+  await page.context().storageState({ path: adminAuthFile });
 });

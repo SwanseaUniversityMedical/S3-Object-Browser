@@ -29,6 +29,7 @@ import PageHeaderWrapper from "../Common/PageHeaderWrapper/PageHeaderWrapper";
 import ObjectManagerButton from "../Common/ObjectManager/ObjectManagerButton";
 import HelpMenu from "../HelpMenu";
 import { setHelpName } from "../../../systemSlice";
+import BucketSwitcher from "./BucketSwitcher";
 
 interface IOBHeader {
   bucketName: string;
@@ -83,7 +84,20 @@ const OBHeader = ({ bucketName }: IOBHeader) => {
     <Fragment>
       {!obOnly ? (
         <PageHeaderWrapper
-          label={"Object Browser"}
+          label={
+            <Grid
+              container
+              sx={{
+                alignItems: "center",
+                gap: 2,
+              }}
+            >
+              <Grid item>Object Browser</Grid>
+              <Grid item>
+                <BucketSwitcher currentBucket={bucketName} />
+              </Grid>
+            </Grid>
+          }
           actions={
             <Fragment>
               <HelpMenu />
@@ -107,8 +121,10 @@ const OBHeader = ({ bucketName }: IOBHeader) => {
             sx={{
               display: "flex",
               gap: 10,
+              alignItems: "center",
             }}
           >
+            <BucketSwitcher currentBucket={bucketName} />
             {searchBar}
             <ObjectManagerButton />
           </Grid>

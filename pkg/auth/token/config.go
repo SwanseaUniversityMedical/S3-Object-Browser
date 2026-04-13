@@ -19,7 +19,7 @@ package token
 import (
 	"time"
 
-	"github.com/minio/console/pkg/auth/utils"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/utils"
 	"github.com/minio/pkg/v3/env"
 )
 

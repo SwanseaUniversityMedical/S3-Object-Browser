@@ -1,5 +1,5 @@
-// This file is part of MinIO Console Server
-// Copyright (c) 2021 MinIO, Inc.
+// This file is part of S3 Console
+// Copyright (c) 2026 SeRP.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
@@ -30,23 +30,40 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/minio/console/models"
-	"github.com/minio/console/pkg/auth/token"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/models"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/auth/token"
 	"github.com/secure-io/sio-go/sioutil"
 	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/crypto/pbkdf2"
 )
 
+// CredentialsValue represents S3/AWS credentials
+type CredentialsValue struct {
+	AccessKeyID     string
+	SecretAccessKey string
+	SessionToken    string
+}
+
 // Session token errors
 var (
 	ErrNoAuthToken  = errors.New("session token missing")
 	ErrTokenExpired = errors.New("session token has expired")
+	ErrTokenRevoked = errors.New("session token has been revoked")
 	ErrReadingToken = errors.New("session token internal data is malformed")
 )
+
+const revokedSessionRetention = 12 * time.Hour
+
+var revokedSessionTokens = struct {
+	mu     sync.RWMutex
+	tokens map[string]time.Time
+}{
+	tokens: make(map[string]time.Time),
+}
 
 // derivedKey is the key used to encrypt the session token claims, its derived using pbkdf on CONSOLE_PBKDF_PASSPHRASE with CONSOLE_PBKDF_SALT
 var derivedKey = func() []byte {
@@ -59,15 +76,66 @@ func IsSessionTokenValid(token string) bool {
 	return err == nil
 }
 
+func RevokeSessionToken(token string) {
+	normalizedToken := strings.TrimSpace(token)
+	if normalizedToken == "" {
+		return
+	}
+
+	now := time.Now()
+	revokedSessionTokens.mu.Lock()
+	cleanupRevokedSessionTokensLocked(now)
+	revokedSessionTokens.tokens[normalizedToken] = now.Add(revokedSessionRetention)
+	revokedSessionTokens.mu.Unlock()
+}
+
+func IsSessionTokenRevoked(token string) bool {
+	normalizedToken := strings.TrimSpace(token)
+	if normalizedToken == "" {
+		return false
+	}
+
+	now := time.Now()
+	revokedSessionTokens.mu.RLock()
+	expiry, ok := revokedSessionTokens.tokens[normalizedToken]
+	revokedSessionTokens.mu.RUnlock()
+	if !ok {
+		return false
+	}
+
+	if !expiry.IsZero() && now.After(expiry) {
+		revokedSessionTokens.mu.Lock()
+		delete(revokedSessionTokens.tokens, normalizedToken)
+		revokedSessionTokens.mu.Unlock()
+		return false
+	}
+
+	return true
+}
+
+func cleanupRevokedSessionTokensLocked(now time.Time) {
+	for token, expiry := range revokedSessionTokens.tokens {
+		if !expiry.IsZero() && now.After(expiry) {
+			delete(revokedSessionTokens.tokens, token)
+		}
+	}
+}
+
 // TokenClaims claims struct for decrypted credentials
 type TokenClaims struct {
-	STSAccessKeyID     string `json:"stsAccessKeyID,omitempty"`
-	STSSecretAccessKey string `json:"stsSecretAccessKey,omitempty"`
-	STSSessionToken    string `json:"stsSessionToken,omitempty"`
-	AccountAccessKey   string `json:"accountAccessKey,omitempty"`
-	HideMenu           bool   `json:"hm,omitempty"`
-	ObjectBrowser      bool   `json:"ob,omitempty"`
-	CustomStyleOB      string `json:"customStyleOb,omitempty"`
+	STSAccessKeyID     string   `json:"stsAccessKeyID,omitempty"`
+	STSSecretAccessKey string   `json:"stsSecretAccessKey,omitempty"`
+	STSSessionToken    string   `json:"stsSessionToken,omitempty"`
+	AccountAccessKey   string   `json:"accountAccessKey,omitempty"`
+	HideMenu           bool     `json:"hm,omitempty"`
+	ObjectBrowser      bool     `json:"ob,omitempty"`
+	CustomStyleOB      string   `json:"customStyleOb,omitempty"`
+	TenantID           string   `json:"tenantId,omitempty"`
+	AllowedBuckets     []string `json:"buckets,omitempty"`
+	// Keycloak / OIDC identity fields — always populated from the IdP, never from S3 credentials
+	Subject  string `json:"subject,omitempty"`  // Keycloak "sub" claim — stable UUID for the user
+	Email    string `json:"email,omitempty"`    // Keycloak "email" claim
+	Username string `json:"username,omitempty"` // Keycloak "preferred_username" claim
 }
 
 // STSClaims claims struct for STS Token
@@ -77,9 +145,15 @@ type STSClaims struct {
 
 // SessionFeatures represents features stored in the session
 type SessionFeatures struct {
-	HideMenu      bool
-	ObjectBrowser bool
-	CustomStyleOB string
+	HideMenu       bool
+	ObjectBrowser  bool
+	CustomStyleOB  string
+	TenantID       string
+	AllowedBuckets []string
+	// Keycloak / OIDC identity — populated at login time from the IdP token
+	Subject  string // Keycloak "sub" claim
+	Email    string // Keycloak "email" claim
+	Username string // Keycloak "preferred_username" claim
 }
 
 // SessionTokenAuthenticate takes a session token, decode it, extract claims and validate the signature
@@ -97,6 +171,9 @@ func SessionTokenAuthenticate(token string) (*TokenClaims, error) {
 	if token == "" {
 		return nil, ErrNoAuthToken
 	}
+	if IsSessionTokenRevoked(token) {
+		return nil, ErrTokenRevoked
+	}
 	decryptedToken, err := DecryptToken(token)
 	if err != nil {
 		// fail decrypting token
@@ -111,9 +188,9 @@ func SessionTokenAuthenticate(token string) (*TokenClaims, error) {
 	return claimTokens, nil
 }
 
-// NewEncryptedTokenForClient generates a new session token with claims based on the provided STS credentials, first
+// NewEncryptedTokenForClient generates a new session token with claims based on the provided S3 credentials, first
 // encrypts the claims and the sign them
-func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey string, features *SessionFeatures) (string, error) {
+func NewEncryptedTokenForClient(credentials *CredentialsValue, accountAccessKey string, features *SessionFeatures) (string, error) {
 	if credentials != nil {
 		tokenClaims := &TokenClaims{
 			STSAccessKeyID:     credentials.AccessKeyID,
@@ -125,6 +202,11 @@ func NewEncryptedTokenForClient(credentials *credentials.Value, accountAccessKey
 			tokenClaims.HideMenu = features.HideMenu
 			tokenClaims.ObjectBrowser = features.ObjectBrowser
 			tokenClaims.CustomStyleOB = features.CustomStyleOB
+			tokenClaims.TenantID = features.TenantID
+			tokenClaims.AllowedBuckets = features.AllowedBuckets
+			tokenClaims.Subject = features.Subject
+			tokenClaims.Email = features.Email
+			tokenClaims.Username = features.Username
 		}
 
 		encryptedClaims, err := encryptClaims(tokenClaims)
@@ -319,10 +401,15 @@ func GetTokenFromRequest(r *http.Request) (string, error) {
 		return "", ErrNoAuthToken
 	}
 	currentTime := time.Now()
-	if tokenCookie.Expires.After(currentTime) {
+	// Check if cookie has expired (Expires is before current time)
+	if !tokenCookie.Expires.IsZero() && tokenCookie.Expires.Before(currentTime) {
 		return "", ErrTokenExpired
 	}
-	return strings.TrimSpace(tokenCookie.Value), nil
+	tokenValue := strings.TrimSpace(tokenCookie.Value)
+	if IsSessionTokenRevoked(tokenValue) {
+		return "", ErrTokenRevoked
+	}
+	return tokenValue, nil
 }
 
 func GetClaimsFromTokenInRequest(req *http.Request) (*models.Principal, error) {
@@ -336,10 +423,21 @@ func GetClaimsFromTokenInRequest(req *http.Request) (*models.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Serialize allowed buckets to JSON string for Principal
+	var allowedBucketsJSON string
+	if len(claims.AllowedBuckets) > 0 {
+		bucketData, err := json.Marshal(claims.AllowedBuckets)
+		if err == nil {
+			allowedBucketsJSON = string(bucketData)
+		}
+	}
+
 	return &models.Principal{
 		STSAccessKeyID:     claims.STSAccessKeyID,
 		STSSecretAccessKey: claims.STSSecretAccessKey,
 		STSSessionToken:    claims.STSSessionToken,
 		AccountAccessKey:   claims.AccountAccessKey,
+		AllowedBuckets:     allowedBucketsJSON,
 	}, nil
 }

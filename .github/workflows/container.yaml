@@ -41,7 +41,7 @@ jobs:
       cosign-public-key: ${{ vars.COSIGN_PUBLIC_KEY }}
       build-file: ./Dockerfile
       build-context: .
-      platforms: "linux/amd64,linux/arm64"
+    #   platforms: "linux/amd64,linux/arm64"
     secrets:
       cosign-private-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
       cosign-password: ${{ secrets.COSIGN_PASSWORD }}

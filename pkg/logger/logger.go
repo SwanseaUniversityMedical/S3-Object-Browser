@@ -27,17 +27,19 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/minio/pkg/v3/env"
 
-	"github.com/minio/console/pkg"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg"
 	"github.com/minio/pkg/v3/certs"
 
-	"github.com/minio/console/pkg/logger/config"
-	"github.com/minio/console/pkg/logger/message/log"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/config"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/message/log"
+	"github.com/SwanseaUniversityMedical/S3-Object-Browser/pkg/logger/target/postgres"
 	"github.com/minio/highwayhash"
 	"github.com/minio/minio-go/v7/pkg/set"
 )
@@ -422,6 +424,27 @@ func InitializeLogger(ctx context.Context, transport *http.Transport) error {
 	err = applyDynamicConfigForSubSys(ctx, transport, config.AuditWebhookSubSys)
 	if err != nil {
 		return err
+	}
+
+	// Initialize PostgreSQL audit persistence if configured
+	if enable, _ := config.ParseBool(env.Get(EnvAuditPersistenceEnabled, "")); enable {
+		dsn := env.Get(EnvAuditPersistenceURL, "")
+		if dsn != "" {
+			queueSize := 10000 // default queue size
+			if qs, err := strconv.Atoi(env.Get(EnvAuditPersistenceQueueSize, "")); err == nil && qs > 0 {
+				queueSize = qs
+			}
+			pgCfg := postgres.Config{
+				Enabled:   true,
+				DSN:       dsn,
+				QueueSize: queueSize,
+			}
+			if err := AddAuditPostgresTarget(pgCfg); err != nil {
+				return fmt.Errorf("audit postgres: failed to initialize: %w", err)
+			}
+		} else {
+			return errors.New("audit postgres: CONSOLE_AUDIT_PERSISTENCE_ENABLED=true but CONSOLE_AUDIT_PERSISTENCE_URL is empty")
+		}
 	}
 
 	if enable, _ := config.ParseBool(env.Get(EnvLoggerJSONEnable, "")); enable {
